@@ -1119,3 +1119,1054 @@ h1 em {
     font-size: 8px;
   }
 }
+/* Progression expansion — compact readable cards, inspectable talent paths. */
+.nav {
+  gap: 3px;
+}
+.nav button {
+  padding: 9px 14px;
+}
+.talent-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin: 28px 0 18px;
+}
+.talent-heading h1 {
+  font-size: 38px;
+  letter-spacing: -1.5px;
+  margin: 10px 0;
+}
+.talent-heading p {
+  font-size: 11px;
+  color: #78826e;
+  line-height: 1.6;
+}
+.talent-heroes {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+.talent-heroes button {
+  border: 1px solid #cbd1bd;
+  background: #eceee0a8;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  height: 58px;
+  padding: 6px 12px;
+}
+.talent-heroes button.active {
+  background: #dce4d0;
+  border-color: #73836c;
+}
+.talent-heroes img {
+  height: 45px;
+  width: 36px;
+  object-fit: contain;
+}
+.talent-heroes span {
+  font-size: 11px;
+  font-weight: 700;
+}
+.talent-heroes small {
+  display: block;
+  font-size: 8px;
+  font-weight: 500;
+  margin-top: 5px;
+  color: #818a75;
+}
+.mastery-bar {
+  margin: 15px 0 18px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 22px;
+  background: #e6e9d8a0;
+  padding: 12px 16px;
+  border: 1px solid #ccd2bf;
+  border-radius: 7px;
+}
+.mastery-bar > div:first-child {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.mastery-bar b {
+  font-family: Georgia, serif;
+  font-weight: 500;
+  font-size: 20px;
+}
+.mastery-bar span,
+.mastery-bar small {
+  font-size: 10px;
+  color: #75816a;
+}
+.mastery-track {
+  height: 5px;
+  border-radius: 4px;
+  background: #cfd7c0;
+  overflow: hidden;
+}
+.mastery-track i {
+  display: block;
+  background: #9b7848;
+  height: 100%;
+}
+.talent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.talent-tree {
+  border: 1px solid #c6ceba;
+  border-top: 3px solid var(--tree);
+  border-radius: 8px;
+  background: #efeee2bb;
+  padding: 12px 12px 8px;
+}
+.talent-tree > header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 12px;
+}
+.talent-tree > header > span {
+  font-size: 28px;
+  color: var(--tree);
+}
+.talent-tree h3 {
+  font-size: 25px;
+}
+.talent-tree header small {
+  display: block;
+  font-size: 9px;
+  color: #818c74;
+  margin-top: 4px;
+}
+.talent-row {
+  position: relative;
+  padding-left: 33px;
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+  min-height: 44px;
+}
+.row-label {
+  position: absolute;
+  left: 0;
+  top: 17px;
+  font-size: 7px;
+  color: #929b85;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.fork-row {
+  grid-template-columns: 1fr 1fr;
+}
+.talent-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 7px 9px;
+  border: 1px solid #c9d1bd;
+  border-radius: 5px;
+  background: #e5e9d9;
+  position: relative;
+  text-align: left;
+}
+.talent-node .node-symbol {
+  font-size: 17px;
+  min-width: 15px;
+  color: var(--tree);
+}
+.talent-node b {
+  font-size: 10px;
+  line-height: 1.3;
+  display: block;
+}
+.talent-node small {
+  font-size: 6px;
+  letter-spacing: 0.6px;
+  color: #8a927e;
+  display: block;
+  margin-top: 4px;
+}
+.talent-node em {
+  font-style: normal;
+  font-size: 9px;
+  color: #8a7959;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.talent-node.invested {
+  background: #dae2cc;
+  border-color: #aab99b;
+}
+.talent-node.inspected {
+  outline: 2px solid var(--tree);
+  outline-offset: 1px;
+}
+.talent-node.gated {
+  opacity: 0.48;
+}
+.talent-node.special {
+  background: #e8e4d2;
+  border-color: #cfbd93;
+}
+.talent-node.capstone {
+  background: #dfd7be;
+  border-color: #b49a69;
+}
+.fork-row .talent-node {
+  padding: 6px;
+  gap: 4px;
+}
+.fork-row .talent-node b {
+  font-size: 9px;
+}
+.fork-row .node-symbol {
+  display: none;
+}
+.talent-inspector {
+  position: sticky;
+  bottom: -28px;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin: 16px -2px 0;
+  padding: 15px 20px;
+  background: #f5f1e4fa;
+  border: 1px solid #bfc9b1;
+  border-radius: 8px;
+  box-shadow: 0 -5px 22px #354d3710;
+}
+.talent-inspector .eyebrow {
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+.talent-inspector h3 {
+  font-size: 23px;
+  margin: 8px 0 5px;
+}
+.talent-inspector p {
+  font-size: 11px;
+  line-height: 1.5;
+  max-width: 760px;
+}
+.talent-inspector small {
+  display: block;
+  color: #8d815d;
+  font-size: 9px;
+  margin-top: 6px;
+}
+.talent-controls {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.talent-controls button {
+  font-size: 10px;
+  padding: 12px 16px;
+}
+.talents-screen .topbar {
+  height: 38px;
+}
+.talent-callout {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  background: #e1e8d4b0;
+  border: 1px solid #c2cdb4;
+  border-radius: 7px;
+  padding: 12px 16px;
+  margin: 16px 0;
+}
+.talent-callout > span {
+  font-size: 28px;
+  color: #829270;
+}
+.talent-callout b {
+  font-size: 12px;
+}
+.talent-callout small {
+  display: block;
+  font-size: 10px;
+  color: #839074;
+  margin-top: 5px;
+}
+.talent-callout button {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 10px 14px;
+}
+.sanctum-screen .shop-title {
+  margin: 22px 0 12px;
+}
+.sanctum-screen .shop-title h1 {
+  font-size: 36px;
+  letter-spacing: -1.4px;
+}
+.sanctum-screen .shop-title p {
+  font-size: 11px;
+}
+.sanctum-screen .shop-grid {
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  max-width: none;
+}
+.sanctum-screen .shop-card {
+  padding: 13px;
+  min-width: 0;
+}
+.sanctum-screen .shop-icon {
+  font-size: 23px;
+}
+.sanctum-screen .shop-icon small {
+  font-size: 9px;
+}
+.sanctum-screen .shop-card h3 {
+  font-size: 19px;
+  margin: 10px 0 6px;
+}
+.sanctum-screen .shop-card p {
+  font-size: 9px;
+  line-height: 1.55;
+  min-height: 32px;
+}
+.sanctum-screen .ranks {
+  margin: 12px 0;
+  gap: 3px;
+}
+.sanctum-screen .ranks i {
+  width: 15px;
+}
+.sanctum-screen .buy {
+  padding: 8px;
+  font-size: 9px;
+}
+.shop-filters {
+  display: flex;
+  gap: 7px;
+  margin: 14px 0;
+}
+.shop-filters button {
+  background: transparent;
+  border: 1px solid #c7cfba;
+  border-radius: 18px;
+  padding: 7px 15px;
+  font-size: 10px;
+}
+.shop-filters button.active {
+  background: #3e5949;
+  color: #f4f0df;
+  border-color: #3e5949;
+}
+.draft-modal {
+  width: min(1040px, 96vw);
+  padding: 28px 34px;
+}
+.draft-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.draft-top .eyebrow {
+  justify-content: flex-start;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+.draft-capacity {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #7e8973;
+}
+.draft-capacity i {
+  font-style: normal;
+  padding: 0 8px;
+  color: #b6bea6;
+}
+.draft-modal h2 {
+  font-size: 40px;
+  margin-top: 18px;
+}
+.draft-modal .choices {
+  margin-top: 22px;
+  gap: 16px;
+}
+.draft-modal .upgrade {
+  padding: 16px 20px 18px;
+  min-height: 290px;
+  border-top-width: 3px;
+  display: flex;
+  flex-direction: column;
+}
+.card-rarity {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  letter-spacing: 2px;
+  font-size: 7px;
+  font-weight: 750;
+  color: var(--rarity);
+  margin-bottom: 18px;
+}
+.card-rarity span {
+  font-size: 14px;
+}
+.draft-modal .upgrade .glyph {
+  font-size: 30px;
+  margin: 0 0 18px;
+  color: var(--rarity);
+}
+.draft-modal .upgrade h3 {
+  font-size: 25px;
+  margin: 10px 0 5px;
+}
+.draft-modal .upgrade p {
+  font-size: 10px;
+  margin-top: 8px;
+  line-height: 1.6;
+  flex: 1;
+}
+.draft-modal .upgrade .choose {
+  margin-top: 16px;
+  font-size: 9px;
+  border-top-color: #bdc6b099;
+}
+.rarity-common {
+  --rarity: #84917b;
+  border-top-color: #99a18b;
+}
+.rarity-uncommon {
+  --rarity: #5a8558;
+  border-color: #9fb997;
+  background: #e0e9d5;
+}
+.rarity-rare {
+  --rarity: #567e95;
+  border-color: #a0b9c6;
+  background: #e1e9e7;
+}
+.rarity-epic {
+  --rarity: #8e709a;
+  border-color: #bba5c6;
+  background: #e9e1e9;
+}
+.draft-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+.draft-actions button {
+  border: 1px solid #c3cbb5;
+  border-radius: 6px;
+  background: #e6eada;
+  padding: 11px 17px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.draft-actions b {
+  background: #d0d9c3;
+  min-width: 21px;
+  border-radius: 4px;
+  padding: 3px;
+  font-size: 9px;
+}
+.draft-actions button.active {
+  background: #a65d49;
+  color: #fff3e2;
+  border-color: #a65d49;
+}
+.draft-actions button.active b {
+  background: #c18770;
+}
+.banishing .upgrade {
+  border-color: #b4755c;
+}
+.banishing .upgrade:hover {
+  background: #ead1c2;
+}
+.recipes {
+  margin-top: 17px;
+  color: #7e886f;
+  text-align: left;
+  font-size: 9px;
+  border-top: 1px solid #d3d8c6;
+  padding-top: 12px;
+}
+.recipes summary {
+  cursor: pointer;
+  text-align: center;
+}
+.recipes > div {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding-top: 13px;
+}
+.recipes p {
+  font-size: 9px;
+  line-height: 1.6;
+  background: #e9ebde;
+  padding: 8px;
+  border-radius: 4px;
+}
+.recipes b {
+  font-family: Georgia, serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #4a614b;
+}
+.draft-modal .close-hint {
+  font-size: 8px;
+  margin-top: 13px;
+}
+.loadout-label {
+  font-size: 7px;
+  letter-spacing: 1.3px;
+  color: #4d6348;
+  margin: 0 0 6px 2px;
+}
+.passive-label {
+  margin-top: 8px;
+}
+.passivebar {
+  display: flex;
+  gap: 7px;
+}
+.passive-slot {
+  width: 59px;
+  height: 29px;
+  border: 1px solid #b5c3a6;
+  background: #e8eddbd9;
+  border-radius: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+  color: #69815c;
+}
+.passive-slot small {
+  font-size: 9px;
+  color: #81906f;
+}
+.passive-slot.empty {
+  opacity: 0.45;
+}
+.weapon-slot.evolved {
+  background: #f3e4b9;
+  border: 1px solid #b6944f;
+  box-shadow: 0 0 15px #e4ce8e33;
+}
+.weapon-slot.evolved .glyph {
+  color: #a37835;
+}
+.weapon-slot.evolved small {
+  font-size: 7px;
+  letter-spacing: 0.4px;
+}
+.death-buttons {
+  flex-wrap: wrap;
+}
+.hud-bottom {
+  bottom: 18px;
+}
+@media (max-height: 820px) and (min-width: 1001px) {
+  .talent-heading {
+    margin: 15px 0 12px;
+  }
+  .talent-heading h1 {
+    font-size: 31px;
+    margin: 8px 0;
+  }
+  .talent-heroes button {
+    height: 48px;
+  }
+  .talent-heroes img {
+    height: 38px;
+  }
+  .mastery-bar {
+    margin: 10px 0;
+    padding: 9px 13px;
+  }
+  .talent-tree {
+    padding: 8px;
+  }
+  .talent-tree h3 {
+    font-size: 21px;
+  }
+  .talent-tree > header {
+    margin-bottom: 8px;
+  }
+  .talent-row {
+    margin-top: 4px;
+    min-height: 39px;
+  }
+  .talent-node {
+    min-height: 40px;
+    padding: 6px;
+  }
+  .talent-inspector {
+    padding: 10px 16px;
+    margin-top: 10px;
+  }
+  .talent-inspector h3 {
+    font-size: 20px;
+    margin: 5px 0;
+  }
+  .talent-inspector p {
+    font-size: 10px;
+  }
+  .sanctum-screen .shop-card {
+    padding: 10px;
+  }
+  .sanctum-screen .shop-card h3 {
+    font-size: 17px;
+  }
+  .sanctum-screen .shop-title {
+    margin: 13px 0;
+  }
+  .sanctum-screen .shop-title h1 {
+    font-size: 30px;
+    margin: 9px 0;
+  }
+  .talent-callout {
+    padding: 9px 13px;
+    margin: 10px 0;
+  }
+  .sanctum-screen .ranks {
+    margin: 9px 0;
+  }
+  .sanctum-screen .shop-icon {
+    font-size: 20px;
+  }
+}
+@media (max-width: 1100px) {
+  .sanctum-screen .shop-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .talent-grid {
+    gap: 9px;
+  }
+  .talent-tree {
+    padding: 9px;
+  }
+  .talent-tree h3 {
+    font-size: 21px;
+  }
+  .talent-node {
+    gap: 5px;
+    padding: 6px;
+  }
+  .talent-node b {
+    font-size: 9px;
+  }
+  .talent-heroes button {
+    padding: 6px;
+    gap: 5px;
+  }
+  .mastery-bar {
+    gap: 10px;
+  }
+  .mastery-bar > div:first-child {
+    gap: 9px;
+  }
+  .mastery-bar span,
+  .mastery-bar small {
+    font-size: 9px;
+  }
+}
+@media (max-width: 800px) {
+  .brand small {
+    display: none;
+  }
+  .brand strong {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+  }
+  .brandmark {
+    font-size: 24px;
+  }
+  .brand {
+    gap: 5px;
+  }
+  .topbar {
+    gap: 8px;
+  }
+  .nav {
+    gap: 0;
+  }
+  .nav button {
+    padding: 7px;
+    font-size: 9px;
+  }
+  .coins {
+    font-size: 10px;
+    gap: 4px;
+    margin-left: 6px;
+  }
+  .coins .subtle {
+    display: none;
+  }
+  .talent-heading {
+    align-items: flex-start;
+    margin-top: 24px;
+    gap: 12px;
+  }
+  .talent-heading h1 {
+    font-size: 30px;
+    letter-spacing: -1px;
+  }
+  .talent-heading .eyebrow {
+    font-size: 8px;
+    letter-spacing: 2px;
+  }
+  .talent-heading p {
+    font-size: 10px;
+  }
+  .talent-heading .secondary {
+    padding: 10px;
+    font-size: 9px;
+    white-space: nowrap;
+  }
+  .talent-heroes {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .talent-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .talent-tree h3 {
+    font-size: 26px;
+  }
+  .talent-node b {
+    font-size: 11px;
+  }
+  .fork-row .talent-node b {
+    font-size: 10px;
+  }
+  .talent-node {
+    min-height: 48px;
+    padding: 8px 11px;
+  }
+  .talent-node small {
+    font-size: 7px;
+  }
+  .talent-tree {
+    padding: 14px;
+  }
+  .mastery-bar {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .mastery-bar > div:first-child {
+    justify-content: space-between;
+  }
+  .mastery-track {
+    height: 4px;
+  }
+  .mastery-bar small {
+    font-size: 8px;
+  }
+  .talent-inspector {
+    margin-top: 15px;
+    bottom: -18px;
+    padding: 13px;
+    gap: 10px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .talent-inspector h3 {
+    font-size: 22px;
+  }
+  .talent-controls {
+    align-self: stretch;
+  }
+  .talent-controls button {
+    flex: 1;
+    font-size: 10px;
+    padding: 10px;
+  }
+  .talent-inspector p {
+    font-size: 10px;
+  }
+  .talent-inspector small {
+    font-size: 8px;
+  }
+  .sanctum-screen .shop-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .sanctum-screen .shop-title h1 {
+    font-size: 30px;
+  }
+  .talent-callout {
+    padding: 11px;
+    gap: 9px;
+  }
+  .talent-callout small {
+    font-size: 9px;
+  }
+  .talent-callout button {
+    padding: 9px;
+    font-size: 9px;
+  }
+  .draft-modal {
+    padding: 24px;
+  }
+  .draft-modal h2 {
+    font-size: 34px;
+  }
+  .draft-top {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .draft-modal .choices {
+    gap: 9px;
+  }
+  .draft-modal .upgrade {
+    padding: 14px;
+    min-height: 310px;
+  }
+  .draft-modal .upgrade h3 {
+    font-size: 22px;
+  }
+  .draft-modal .upgrade p {
+    font-size: 10px;
+  }
+  .draft-modal .upgrade .tier {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .draft-actions {
+    gap: 7px;
+  }
+  .draft-actions button {
+    padding: 10px;
+    font-size: 9px;
+    gap: 7px;
+  }
+  .passive-slot {
+    width: 44px;
+    height: 25px;
+  }
+  .passivebar {
+    gap: 5px;
+  }
+  .loadout-label {
+    font-size: 6px;
+  }
+  .hud-bottom {
+    bottom: 12px;
+  }
+  .passive-label {
+    margin-top: 5px;
+  }
+}
+@media (max-width: 480px) {
+  .nav button {
+    padding: 6px 5px;
+    font-size: 8px;
+  }
+  .coins {
+    font-size: 10px;
+    gap: 3px;
+    margin-left: 4px;
+  }
+  .brand strong {
+    font-size: 10px;
+    letter-spacing: 1.2px;
+  }
+  .brandmark {
+    font-size: 22px;
+  }
+  .sanctum-screen .shop-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sanctum-screen .shop-card {
+    padding: 12px;
+  }
+  .sanctum-screen .shop-card h3 {
+    font-size: 20px;
+  }
+  .sanctum-screen .shop-card p {
+    font-size: 10px;
+    min-height: 45px;
+  }
+  .sanctum-screen .buy {
+    font-size: 10px;
+  }
+  .shop-filters {
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .shop-filters button {
+    padding: 6px 10px;
+    font-size: 9px;
+  }
+  .talent-heading {
+    display: block;
+  }
+  .talent-heading .secondary {
+    margin-top: 12px;
+  }
+  .talent-callout > span {
+    display: none;
+  }
+  .talent-callout small {
+    max-width: 180px;
+  }
+  .talent-callout button {
+    font-size: 8px;
+  }
+  .talent-callout b {
+    font-size: 11px;
+  }
+  .talent-heroes button {
+    gap: 4px;
+    height: 53px;
+  }
+  .talent-heroes span {
+    font-size: 9px;
+  }
+  .talent-heroes small {
+    font-size: 7px;
+  }
+  .talent-heroes img {
+    width: 27px;
+    height: 37px;
+  }
+  .talent-inspector .eyebrow {
+    font-size: 7px;
+  }
+  .draft-shade {
+    padding: 9px;
+    overflow: auto;
+    align-items: flex-start;
+  }
+  .draft-modal {
+    margin: auto;
+    padding: 19px;
+    max-height: 97dvh;
+    overflow: auto;
+  }
+  .draft-top .eyebrow {
+    font-size: 7px;
+    letter-spacing: 1.5px;
+  }
+  .draft-modal h2 {
+    font-size: 29px;
+    margin: 14px 0 8px;
+  }
+  .draft-modal > p {
+    font-size: 10px;
+  }
+  .draft-modal .choices {
+    grid-template-columns: 1fr;
+    gap: 9px;
+    margin-top: 16px;
+  }
+  .draft-modal .upgrade {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 3px 9px;
+    padding: 10px 13px;
+    min-height: 0;
+  }
+  .draft-modal .upgrade .glyph {
+    grid-column: 1;
+    grid-row: 2/5;
+    margin: 5px 0;
+    font-size: 26px;
+  }
+  .draft-modal .upgrade .card-rarity {
+    grid-column: 1/-1;
+    margin: 0 0 5px;
+    font-size: 6px;
+  }
+  .draft-modal .upgrade .tier {
+    grid-column: 2;
+    font-size: 7px;
+    letter-spacing: 0.8px;
+  }
+  .draft-modal .upgrade h3 {
+    grid-column: 2;
+    font-size: 21px;
+    margin: 3px 0;
+  }
+  .draft-modal .upgrade p {
+    grid-column: 2;
+    font-size: 9px;
+    margin: 3px 0;
+    line-height: 1.5;
+  }
+  .draft-modal .upgrade .choose {
+    display: none;
+  }
+  .draft-actions {
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .draft-actions button {
+    padding: 8px;
+    font-size: 8px;
+    gap: 5px;
+    flex: 1;
+    justify-content: center;
+  }
+  .draft-actions b {
+    font-size: 8px;
+    min-width: 17px;
+    padding: 2px;
+  }
+  .draft-modal .close-hint {
+    font-size: 7px;
+  }
+  .recipes {
+    font-size: 8px;
+    margin-top: 12px;
+  }
+  .recipes > div {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .passive-slot {
+    height: 22px;
+  }
+  .passive-slot small {
+    font-size: 7px;
+  }
+  .loadout .weapon-slot {
+    height: 48px;
+  }
+  .loadout .weapon-slot .glyph {
+    font-size: 20px;
+  }
+  .weapon-slot .dots {
+    font-size: 6px;
+    letter-spacing: 1px;
+  }
+  .passive-label {
+    margin-top: 4px;
+  }
+  .death-buttons button {
+    font-size: 10px;
+    padding: 12px;
+  }
+  .talents-screen {
+    padding-bottom: 18px;
+  }
+}

@@ -1,4 +1,30 @@
 import "./style.css";
+import {
+  VERSION,
+  SPELLS as weaponInfo,
+  WEAPON_KEYS as weaponKeys,
+  PASSIVES,
+  PASSIVE_KEYS,
+  EVOLUTIONS,
+  META as metaInfo,
+  emptyWeapons,
+  emptyPassives,
+  talentTrees,
+  talentReason,
+  buyTalent,
+  refundTalent,
+  treeSpent,
+  totalSpent,
+  earnedPoints,
+  talentThreshold,
+  talentEffects,
+  loadSave,
+  type Weapon,
+  type Passive,
+  type Save,
+  type TalentNode,
+  type TalentTree,
+} from "./progression";
 
 type Art = {
   id: string;
@@ -11,17 +37,15 @@ type Art = {
   height: number;
   adult: boolean;
 };
-type Weapon = "blade" | "bolt" | "aura" | "axe" | "lightning" | "familiar";
 type Screen =
-  "title" | "shop" | "run" | "levelup" | "paused" | "dead" | "unlock";
-type Save = {
-  gold: number;
-  unlocked: string[];
-  selected: string;
-  meta: Record<string, number>;
-  best: number;
-  runs: number;
-};
+  | "title"
+  | "shop"
+  | "talents"
+  | "run"
+  | "levelup"
+  | "paused"
+  | "dead"
+  | "unlock";
 const $ = document.querySelector<HTMLElement>("#ui")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#world")!;
 const ctx = canvas.getContext("2d", { alpha: false })!;
@@ -47,151 +71,98 @@ let selected: Art,
   lastHud = 0,
   unlockTarget: Art | null = null;
 const images = new Map<string, HTMLImageElement>();
-const defaults: Save = {
-  gold: 0,
-  unlocked: ["c112"],
-  selected: "c112",
-  meta: { hp: 0, damage: 0, speed: 0, magnet: 0, gold: 0, revive: 0 },
-  best: 0,
-  runs: 0,
-};
 let save: Save;
 try {
-  save = {
-    ...defaults,
-    ...JSON.parse(localStorage.getItem("hollowmere-v1") || "{}"),
-  };
-  save.meta = { ...defaults.meta, ...save.meta };
-  if (!Array.isArray(save.unlocked)) save.unlocked = ["c112"];
-  save.gold = Math.max(0, Number(save.gold) || 0);
+  save = loadSave(localStorage);
 } catch {
-  save = structuredClone(defaults);
+  save = loadSave({ getItem: () => null });
 }
 function persist() {
   try {
-    localStorage.setItem("hollowmere-v1", JSON.stringify(save));
+    localStorage.setItem("hollowmere-v2", JSON.stringify(save));
   } catch {
     notify("Storage is unavailable. This session will still work.");
   }
 }
-const weaponInfo: Record<
-  Weapon,
-  { name: string; glyph: string; desc: string; color: string }
-> = {
-  blade: {
-    name: "Moonblades",
-    glyph: "✧",
-    desc: "Orbiting blades cut through nearby foes.",
-    color: "#e5d5aa",
-  },
-  bolt: {
-    name: "Arcane Bolt",
-    glyph: "✦",
-    desc: "Seeks the nearest foe with a piercing spell.",
-    color: "#a8ccd0",
-  },
-  aura: {
-    name: "Hallowed Ground",
-    glyph: "☼",
-    desc: "A sacred aura burns everything around you.",
-    color: "#e4c67f",
-  },
-  axe: {
-    name: "Reaper Axe",
-    glyph: "⚒",
-    desc: "Lob a spinning axe through a crowd.",
-    color: "#b5c1cb",
-  },
-  lightning: {
-    name: "Stormcall",
-    glyph: "ϟ",
-    desc: "Lightning leaps between nearby enemies.",
-    color: "#c9d6ac",
-  },
-  familiar: {
-    name: "Wisp Companion",
-    glyph: "❋",
-    desc: "A loyal wisp fires homing embers.",
-    color: "#d1b1c9",
-  },
-};
-const weaponKeys = Object.keys(weaponInfo) as Weapon[];
-const metaInfo = [
-  {
-    id: "hp",
-    name: "Vital Roots",
-    icon: "♡",
-    desc: "+15 maximum vitality per rank.",
-    base: 45,
-    max: 8,
-  },
-  {
-    id: "damage",
-    name: "Ancient Might",
-    icon: "✦",
-    desc: "+8% to all weapon damage per rank.",
-    base: 60,
-    max: 8,
-  },
-  {
-    id: "speed",
-    name: "Wayfarer",
-    icon: "➶",
-    desc: "+5% movement speed per rank.",
-    base: 40,
-    max: 5,
-  },
-  {
-    id: "magnet",
-    name: "Soulreach",
-    icon: "◎",
-    desc: "+20% experience pickup range per rank.",
-    base: 35,
-    max: 6,
-  },
-  {
-    id: "gold",
-    name: "Golden Oath",
-    icon: "◇",
-    desc: "+10% gold earned per rank.",
-    base: 50,
-    max: 6,
-  },
-  {
-    id: "revive",
-    name: "Second Dawn",
-    icon: "❈",
-    desc: "One revival per run. Return at 50% vitality.",
-    base: 250,
-    max: 1,
-  },
-];
 const heroPrices = [0, 120, 180, 260, 360, 480];
 function money() {
   return `<div class="coins"><span class="coin">◇</span> ${Math.floor(save.gold).toLocaleString()} <span class="subtle">gold</span></div>`;
 }
 function topbar(active: string) {
-  return `<header class="topbar"><div class="brand"><span class="brandmark">◈</span><div><strong>HOLLOWMERE</strong><small>R I F T B O U N D</small></div></div><nav class="nav"><button data-action="title" class="${active === "title" ? "active" : ""}">Expedition</button><button data-action="shop" class="${active === "shop" ? "active" : ""}">Sanctum</button>${money()}</nav></header>`;
+  return `<header class="topbar"><div class="brand"><span class="brandmark">◈</span><div><strong>HOLLOWMERE</strong><small>R I F T B O U N D</small></div></div><nav class="nav"><button data-action="title" class="${active === "title" ? "active" : ""}">Expedition</button><button data-action="shop" class="${active === "shop" ? "active" : ""}">Sanctum</button><button data-action="talents" class="${active === "talents" ? "active" : ""}">Talents</button>${money()}</nav></header>`;
 }
 function title() {
   screen = "title";
   document.body.classList.remove("playing");
   const owned = save.unlocked.includes(selected.id),
     wi = weaponInfo[selected.weapon as Weapon];
-  $.innerHTML = `<section class="screen">${topbar("title")}<div class="intro"><div class="intro-copy"><div class="eyebrow">An endless little adventure</div><h1>One soul.<br><em>Endless night.</em></h1><p>The rift is open. Stand against the wilds, gather forgotten power, and return stronger with every fall.</p><button class="primary" data-action="${owned ? "start" : "unlock"}">${owned ? "Enter the Hollow" : "Unlock " + selected.name}<span>↗</span></button><div class="minor">${owned ? "WASD to move · Weapons strike automatically" : `◇ ${heroPrices[heroes.indexOf(selected)]} gold · A new path awaits`}</div></div><div class="hero-stage"><div class="halo"></div><div class="pedestal"></div><img class="stage-sprite" src="${selected.src}" alt="${selected.name}, ${selected.title}"><div class="hero-label"><small>YOUR CHOSEN SOUL</small><strong>${selected.name}</strong><small>${selected.title.toUpperCase()}</small><small>${wi.glyph} ${wi.name}</small></div><span class="hero-number">0${heroes.indexOf(selected) + 1}</span></div></div><div class="roster-header"><span class="sectionlabel">CHOOSE YOUR WANDERER</span><span class="subtle">${save.unlocked.length} / ${heroes.length} unlocked · Every soul plays differently</span></div><div class="roster">${heroes.map((a, i) => `<button class="hero-card ${a.id === selected.id ? "selected" : ""} ${save.unlocked.includes(a.id) ? "" : "locked"}" data-hero="${a.id}" aria-label="Select ${a.name}"><img src="${a.src}" alt=""><div class="cardtext"><b>${a.name}</b><small>${a.title}</small></div><span class="badge">${save.unlocked.includes(a.id) ? (a.id === selected.id ? "● Selected" : "Available") : "◇ " + heroPrices[i]}</span></button>`).join("")}</div><footer class="footnote"><span>PROTOTYPE 0.1 · SINGLE PLAYER · SAVED ON THIS DEVICE</span><span>Best ${formatTime(save.best)} · ${save.runs} expeditions</span></footer></section>`;
+  $.innerHTML = `<section class="screen">${topbar("title")}<div class="intro"><div class="intro-copy"><div class="eyebrow">An endless little adventure</div><h1>One soul.<br><em>Endless night.</em></h1><p>The rift is open. Stand against the wilds, gather forgotten power, and return stronger with every fall.</p><button class="primary" data-action="${owned ? "start" : "unlock"}">${owned ? "Enter the Hollow" : "Unlock " + selected.name}<span>↗</span></button><div class="minor">${owned ? "WASD to move · Weapons strike automatically" : `◇ ${heroPrices[heroes.indexOf(selected)]} gold · A new path awaits`}</div></div><div class="hero-stage"><div class="halo"></div><div class="pedestal"></div><img class="stage-sprite" src="${selected.src}" alt="${selected.name}, ${selected.title}"><div class="hero-label"><small>YOUR CHOSEN SOUL</small><strong>${selected.name}</strong><small>${selected.title.toUpperCase()}</small><small>${wi.glyph} ${wi.name}</small></div><span class="hero-number">0${heroes.indexOf(selected) + 1}</span></div></div><div class="roster-header"><span class="sectionlabel">CHOOSE YOUR WANDERER</span><span class="subtle">${save.unlocked.length} / ${heroes.length} unlocked · Every soul plays differently</span></div><div class="roster">${heroes.map((a, i) => `<button class="hero-card ${a.id === selected.id ? "selected" : ""} ${save.unlocked.includes(a.id) ? "" : "locked"}" data-hero="${a.id}" aria-label="Select ${a.name}"><img src="${a.src}" alt=""><div class="cardtext"><b>${a.name}</b><small>${a.title}</small></div><span class="badge">${save.unlocked.includes(a.id) ? (a.id === selected.id ? "● Selected" : "Available") : "◇ " + heroPrices[i]}</span></button>`).join("")}</div><footer class="footnote"><span>PROGRESSION ${VERSION} · SINGLE PLAYER · SAVED ON THIS DEVICE</span><span>Best ${formatTime(save.best)} · ${save.runs} expeditions</span></footer></section>`;
 }
+let shopFilter = "All",
+  talentHeroId = "c112",
+  inspectedTalent = "";
 function shop() {
   screen = "shop";
   document.body.classList.remove("playing");
-  $.innerHTML = `<section class="screen">${topbar("shop")}<div class="shop-title"><div class="eyebrow">Strength that stays with you</div><h1>The quiet between storms.</h1><p>Invest your hard-earned gold. Every blessing carries into your next expedition.</p></div><div class="shop-grid">${metaInfo
+  $.innerHTML = `<section class="screen sanctum-screen">${topbar("shop")}<div class="shop-title"><div class="eyebrow">18 lasting blessings · One stronger tomorrow</div><h1>The quiet between storms.</h1><p>Gold strengthens every wanderer. Talent mastery belongs to each soul.</p></div><div class="talent-callout"><span>◈</span><div><b>Grow beyond gold.</b><small>18 hero-specific trees · 51 earned points per hero · Free respecs</small></div><button class="secondary" data-action="talents">Explore talents ↗</button></div><div class="shop-filters">${["All", "Power", "Endurance", "Fortune", "Drafting"].map((k) => `<button data-filter="${k}" class="${shopFilter === k ? "active" : ""}">${k}</button>`).join("")}</div><div class="shop-grid">${metaInfo
+    .filter((m) => shopFilter === "All" || m.group === shopFilter)
     .map((m) => {
-      let rank = save.meta[m.id],
-        cost = Math.round(m.base * Math.pow(1.65, rank));
-      return `<article class="shop-card"><div class="shop-icon">${m.icon}<small>RANK ${rank} / ${m.max}</small></div><h3>${m.name}</h3><p>${m.desc}</p><div class="ranks">${Array.from({ length: m.max }, (_, i) => `<i class="${i < rank ? "on" : ""}"></i>`).join("")}</div><button class="buy" data-buy="${m.id}" ${rank >= m.max || save.gold < cost ? "disabled" : ""}><span>${rank >= m.max ? "Fully awakened" : "Awaken blessing"}</span><span>${rank >= m.max ? "✓" : "◇ " + cost}</span></button></article>`;
+      const rank = save.meta[m.id],
+        cost = Math.round(m.base * 1.65 ** rank);
+      return `<article class="shop-card"><div class="shop-icon">${m.icon}<small>${rank}/${m.max}</small></div><h3>${m.name}</h3><p>${m.desc}</p><div class="ranks">${Array.from({ length: m.max }, (_, i) => `<i class="${i < rank ? "on" : ""}"></i>`).join("")}</div><button class="buy" data-buy="${m.id}" ${rank >= m.max || save.gold < cost ? "disabled" : ""}><span>${rank >= m.max ? "Awakened" : "Awaken"}</span><span>${rank >= m.max ? "✓" : "◇ " + cost}</span></button></article>`;
     })
     .join(
       "",
-    )}</div><footer class="footnote"><span>GOLD AND BLESSINGS ARE SAVED AUTOMATICALLY</span><span>No purchases · Just play</span></footer></section>`;
+    )}</div><footer class="footnote"><span>V${VERSION} · SAFE SAVE MIGRATION · NO PURCHASES</span><span>Gold and talents save automatically</span></footer></section>`;
+}
+function talents() {
+  screen = "talents";
+  document.body.classList.remove("playing");
+  const hero = heroes.find((h) => h.id === talentHeroId) || selected;
+  talentHeroId = hero.id;
+  const p = save.heroes[hero.id],
+    trees = talentTrees(hero.id),
+    earned = earnedPoints(p.xp),
+    spent = totalSpent(p),
+    next = talentThreshold(earned + 1),
+    prev = talentThreshold(earned);
+  let tree =
+      trees.find((t) => t.nodes.some((n) => n.id === inspectedTalent)) ||
+      trees[0],
+    node = tree.nodes.find((n) => n.id === inspectedTalent) || tree.nodes[0];
+  inspectedTalent = node.id;
+  const reason = talentReason(tree, node, p),
+    rank = p.spent[node.id] || 0;
+  $.innerHTML = `<section class="screen talents-screen">${topbar("talents")}<header class="talent-heading"><div><div class="eyebrow">The soul remembers</div><h1>Make your own legend.</h1><p>Earn talent XP from survival, kills, and rift lords. Each hero keeps their own 51-point journey.</p></div><button class="secondary" data-action="respec" ${spent ? "" : "disabled"}>↶ Free respec</button></header><div class="talent-heroes">${heroes.map((h) => `<button class="${h.id === hero.id ? "active" : ""}" data-talenthero="${h.id}"><img src="${h.src}" alt=""><span>${h.name}<small>${earnedPoints(save.heroes[h.id].xp)} / 51 earned</small></span></button>`).join("")}</div><div class="mastery-bar"><div><b>${hero.name}</b><span>${earned - spent} unspent / ${earned} earned · ${spent} allocated</span></div><div class="mastery-track"><i style="width:${earned === 51 ? 100 : Math.max(0, Math.min(100, ((p.xp - prev) / (next - prev)) * 100))}%"></i></div><small>${earned === 51 ? "51 / 51 · Mastery complete" : `${Math.floor(p.xp).toLocaleString()} talent XP · next point at ${next.toLocaleString()}`}</small></div><div class="talent-grid">${trees
+    .map(
+      (t) =>
+        `<article class="talent-tree" style="--tree:${t.color}"><header><span>${t.glyph}</span><div><h3>${t.name}</h3><small>${treeSpent(t, p)} points · Rows every 5 earlier points</small></div></header>${[
+          0, 5, 10, 15, 20, 25, 30,
+        ]
+          .map((row) => {
+            const nodes = t.nodes.filter((n) => n.row === row);
+            return `<div class="talent-row ${nodes.length > 1 ? "fork-row" : ""}"><span class="row-label">${row === 0 ? "ROOT" : row + " PT"}</span>${nodes
+              .map((n) => {
+                const r = p.spent[n.id] || 0,
+                  why = talentReason(t, n, p),
+                  blocked = why.startsWith("Spend") || why.startsWith("Choose");
+                return `<button data-talent="${n.id}" class="talent-node ${r ? "invested" : ""} ${blocked ? "gated" : ""} ${n.kind !== "stat" ? "special " + n.kind : ""} ${inspectedTalent === n.id ? "inspected" : ""}" title="${n.name}: ${n.desc} Rank ${r}/${n.max}. ${why}"><span class="node-symbol">${n.kind === "capstone" ? "✺" : n.kind === "milestone" ? "✦" : n.choice ? "◇" : "•"}</span><span><b>${n.name}</b><small>${n.kind === "capstone" ? "CAPSTONE" : n.kind === "milestone" ? "MILESTONE" : n.choice ? "CHOOSE ONE" : "TALENT"}</small></span><em>${r}/${n.max}</em></button>`;
+              })
+              .join("")}</div>`;
+          })
+          .join("")}</article>`,
+    )
+    .join(
+      "",
+    )}</div><aside class="talent-inspector" role="status"><div><span class="eyebrow">${tree.name} · ${node.row === 0 ? "Root" : node.row + " point row"} · Rank ${rank}/${node.max}</span><h3>${node.name}</h3><p>${node.desc}</p><small>${reason || "Ready to learn. Changes apply to your next expedition."}</small></div><div class="talent-controls"><button class="primary" data-talent-buy="${node.id}" ${reason ? "disabled" : ""}>Learn +1</button><button class="secondary" data-talent-refund="${node.id}" ${rank ? "" : "disabled"}>Refund −1</button></div></aside></section>`;
+}
+function locateTalent(
+  id: string,
+): { tree: TalentTree; node: TalentNode } | undefined {
+  for (const tree of talentTrees(talentHeroId)) {
+    const node = tree.nodes.find((n) => n.id === id);
+    if (node) return { tree, node };
+  }
 }
 function notify(text: string) {
   document.querySelector(".toast")?.remove();
@@ -273,6 +244,7 @@ type Enemy = {
   boss: boolean;
   elite: boolean;
   hitCd: number;
+  slow: number;
 };
 type Bullet = {
   x: number;
@@ -286,6 +258,10 @@ type Bullet = {
   angle: number;
   hit: Set<Enemy>;
   pierce: number;
+  maxLife: number;
+  returning: boolean;
+  target?: Enemy;
+  targetCd: number;
 };
 type Gem = {
   x: number;
@@ -327,39 +303,123 @@ let player = {
   lunge: 0,
   invuln: 0,
 };
-let run = {
-  time: 0,
-  kills: 0,
-  gold: 0,
-  xp: 0,
-  need: 9,
-  level: 1,
-  damage: 1,
-  area: 1,
-  cooldown: 1,
-  magnet: 82,
-  speed: 1,
-  regen: 0,
-  revived: false,
-  bosses: 0,
-  earned: false,
-};
-let weapons: Record<Weapon, number> = {
-    blade: 0,
-    bolt: 0,
-    aura: 0,
-    axe: 0,
-    lightning: 0,
-    familiar: 0,
-  },
-  cooldowns: Record<Weapon, number> = {
-    blade: 0,
-    bolt: 0,
-    aura: 0,
-    axe: 0,
-    lightning: 0,
-    familiar: 0,
+function makeRun() {
+  return {
+    time: 0,
+    kills: 0,
+    gold: 0,
+    xp: 0,
+    need: 9,
+    level: 1,
+    damage: 1,
+    area: 1,
+    cooldown: 1,
+    magnet: 82,
+    speed: 1,
+    regen: 0,
+    revived: false,
+    bosses: 0,
+    earned: false,
+    armor: 0,
+    crit: 0,
+    luck: 0,
+    xpGain: 1,
+    goldGain: 1,
+    force: 1,
+    duration: 1,
+    amount: 0,
+    healKill: 0,
+    signatureDamage: 1,
+    signatureCasts: 0,
+    healCd: 0,
+    forkCd: 0,
+    talentXP: 0,
   };
+}
+let qaFreezeProgression = false;
+let run = makeRun(),
+  weapons = emptyWeapons(),
+  cooldowns = emptyWeapons(),
+  passives = emptyPassives(),
+  evolved = new Set<Weapon>(),
+  talentBonus: Record<string, number> = {},
+  draftCharges = { reroll: 2, skip: 1, banish: 1 },
+  banished = new Set<string>(),
+  banishMode = false,
+  pendingDrafts = 0;
+function recalculateStats(fullHeal = false) {
+  const old = player.max,
+    b = talentBonus;
+  player.max = 120 + save.meta.hp * 15 + passives.vitality * 20 + (b.hp || 0);
+  player.hp = fullHeal
+    ? player.max
+    : Math.min(player.max, player.hp + Math.max(0, player.max - old));
+  player.speed =
+    155 *
+    (1 + save.meta.speed * 0.05) *
+    (1 + passives.swiftness * 0.07 + (b.speed || 0));
+  run.damage =
+    1 +
+    save.meta.damage * 0.08 +
+    passives.power * 0.1 +
+    passives.amount * 0.03 +
+    (b.damage || 0);
+  run.signatureDamage = 1 + (b.signatureDamage || 0);
+  run.cooldown =
+    1 + save.meta.haste * 0.05 + passives.haste * 0.08 + (b.haste || 0);
+  run.area = 1 + save.meta.area * 0.06 + passives.area * 0.12 + (b.area || 0);
+  run.magnet =
+    82 * (1 + save.meta.magnet * 0.2 + passives.reach * 0.25 + (b.magnet || 0));
+  run.regen = save.meta.regen * 0.2 + passives.regen * 0.35 + (b.regen || 0);
+  run.armor = save.meta.armor + passives.armor + (b.armor || 0);
+  run.crit = Math.min(0.8, passives.crit * 0.05 + (b.crit || 0));
+  run.luck = save.meta.luck * 0.08 + passives.luck * 0.08 + (b.luck || 0);
+  run.xpGain =
+    1 + save.meta.wisdom * 0.08 + passives.wisdom * 0.1 + (b.xp || 0);
+  run.goldGain =
+    1 + save.meta.gold * 0.1 + passives.fortune * 0.12 + (b.gold || 0);
+  run.force = 1 + save.meta.force * 0.15 + passives.force * 0.2;
+  run.duration = 1 + save.meta.duration * 0.1 + passives.duration * 0.18;
+  run.amount = Math.ceil(passives.amount / 2);
+  run.healKill = passives.leech * 0.2;
+}
+function signature(k: Weapon) {
+  return k === selected.weapon;
+}
+function twin(k: Weapon) {
+  return signature(k) && !!talentBonus.t0_capstone_30;
+}
+function spellHit(e: Enemy, n: number, k: Weapon, kx = 0, ky = 0) {
+  if (!e.alive) return;
+  const sig = signature(k);
+  if (sig) n *= run.signatureDamage;
+  if (
+    (sig && talentBonus.t1_milestone_10) ||
+    k === "frost" ||
+    (k === "axe" && evolved.has("axe"))
+  )
+    e.slow = 1.5;
+  if (sig && talentBonus.t1_milestone_20 && run.time >= run.healCd) {
+    player.hp = Math.min(player.max, player.hp + 0.35);
+    run.healCd = run.time + 0.12;
+  }
+  if (sig && talentBonus.t2_milestone_20 && run.time >= run.forkCd) {
+    run.forkCd = run.time + 0.2;
+    const skip = new Set<Enemy>([e]),
+      other = nearest(e.x, e.y, 135, skip);
+    if (other) {
+      damage(other, n * 0.35);
+      lightningPaths.push({
+        points: [
+          { x: e.x, y: e.y - 25 },
+          { x: other.x, y: other.y - 25 },
+        ],
+        life: 0.12,
+      });
+    }
+  }
+  damage(e, n, kx * run.force, ky * run.force);
+}
 let spawnTimer = 0,
   nextBoss = 180,
   cam = { x: 0, y: 0 },
@@ -396,32 +456,34 @@ function startRun(): void {
     lunge: 0,
     invuln: 2,
   };
-  run = {
-    time: 0,
-    kills: 0,
-    gold: 0,
-    xp: 0,
-    need: 9,
-    level: 1,
-    damage: 1 + save.meta.damage * 0.08,
-    area: 1,
-    cooldown: 1,
-    magnet: 82 * (1 + save.meta.magnet * 0.2),
-    speed: 1,
-    regen: 0,
-    revived: false,
-    bosses: 0,
-    earned: false,
-  };
-  weapons = { blade: 0, bolt: 0, aura: 0, axe: 0, lightning: 0, familiar: 0 };
+  run = makeRun();
+  qaFreezeProgression = false;
+  run.level = 1 + save.meta.start;
+  run.need = Math.floor(8 + run.level * 3.4);
+  weapons = emptyWeapons();
   weapons[selected.weapon as Weapon] = 1;
-  cooldowns = { blade: 0, bolt: 0, aura: 0, axe: 0, lightning: 0, familiar: 0 };
+  cooldowns = emptyWeapons();
+  passives = emptyPassives();
+  evolved = new Set();
+  banished = new Set();
+  banishMode = false;
+  pendingDrafts = save.meta.start;
+  draftCharges = {
+    reroll: 2 + save.meta.reroll,
+    skip: 1 + save.meta.skip,
+    banish: 1 + save.meta.banish,
+  };
+  talentBonus = talentEffects(selected.id, save.heroes[selected.id]);
+  recalculateStats(true);
+  zones.length = 0;
+  lightningPaths.length = 0;
   spawnTimer = 0;
   nextBoss = 180;
   cam = { x: 0, y: 0 };
   for (let i = 0; i < 25; i++) spawnEnemy(false, rand(220, 600));
   hud();
   banner("The Hollow stirs", "EXPEDITION BEGINS");
+  if (pendingDrafts > 0) levelUp();
 }
 function banner(text: string, sub = "THE RIFT GROWS RESTLESS") {
   bannerText = `<small>${sub}</small>${text}`;
@@ -429,7 +491,29 @@ function banner(text: string, sub = "THE RIFT GROWS RESTLESS") {
 }
 function hud() {
   if (screen !== "run") return;
-  $.innerHTML = `<section class="hud"><div class="xp-bar"><div class="xp-fill" style="width:${(run.xp / run.need) * 100}%"></div></div><div class="hud-top"><div class="player-panel"><div class="player-name">${selected.name}<small>LEVEL ${run.level}</small></div><div class="hp-track"><div class="hp-fill" style="width:${(player.hp / player.max) * 100}%"></div></div><div class="hp-text"><span>${Math.ceil(player.hp)} / ${player.max} vitality</span><span>${Math.floor(run.xp)} / ${run.need} XP</span></div></div><div class="time-panel"><b>${formatTime(run.time)}</b><small>WAVE ${Math.floor(run.time / 30) + 1} · ${Math.max(1, Math.ceil((nextBoss - run.time) / 60))}m TO RIFT LORD</small></div><div class="run-resources"><span class="coin">◇</span><b>${Math.floor(run.gold)}</b><span class="sep">/</span><span>⚔ ${run.kills}<span class="kills-label"> slain</span></span><button class="pause" data-action="pause" aria-label="Pause">Ⅱ</button></div></div><div class="hud-bottom"><div class="weaponbar">${weaponKeys.map((k) => `<div class="weapon-slot ${weapons[k] ? "" : "empty"}" title="${weaponInfo[k].name}${weapons[k] ? " level " + weapons[k] : ": not acquired"}"><span class="glyph">${weaponInfo[k].glyph}</span><small>${weapons[k] ? "LV " + weapons[k] : "—"}</small><span class="dots">${"•".repeat(weapons[k])}</span></div>`).join("")}</div><div class="run-hint">WASD / ARROWS &nbsp; MOVE &nbsp; · &nbsp; ESC &nbsp; PAUSE</div></div>${bannerTimer > 0 ? `<div class="banner">${bannerText}</div>` : ""}</section>`;
+  const spells = weaponKeys.filter((k) => weapons[k]),
+    ps = PASSIVE_KEYS.filter((k) => passives[k]);
+  $.innerHTML = `<section class="hud"><div class="xp-bar"><div class="xp-fill" style="width:${Math.min(100, (run.xp / run.need) * 100)}%"></div></div><div class="hud-top"><div class="player-panel"><div class="player-name">${selected.name}<small>LEVEL ${run.level}</small></div><div class="hp-track"><div class="hp-fill" style="width:${(player.hp / player.max) * 100}%"></div></div><div class="hp-text"><span>${Math.ceil(player.hp)} / ${player.max} vitality</span><span>${Math.floor(run.xp)} / ${run.need} XP</span></div></div><div class="time-panel"><b>${formatTime(run.time)}</b><small>WAVE ${Math.floor(run.time / 30) + 1} · RIFT LORD IN ${formatTime(nextBoss - run.time)}</small></div><div class="run-resources"><span class="coin">◇</span><b>${Math.floor(run.gold)}</b><span class="sep">/</span><span>⚔ ${run.kills}</span><button class="pause" data-action="pause" aria-label="Pause">Ⅱ</button></div></div><div class="hud-bottom"><div class="loadout"><div class="loadout-label">SPELLS ${spells.length}/6</div><div class="weaponbar">${Array.from(
+    { length: 6 },
+    (_, i) => {
+      const k = spells[i];
+      return k
+        ? `<div class="weapon-slot ${evolved.has(k) ? "evolved" : ""}" title="${evolved.has(k) ? EVOLUTIONS[k]!.name : weaponInfo[k].name} level ${weapons[k]}/${weaponInfo[k].max}"><span class="glyph">${weaponInfo[k].glyph}</span><small>${evolved.has(k) ? "EVOLVED" : "LV " + weapons[k]}</small><span class="dots">${"•".repeat(weapons[k])}</span></div>`
+        : '<div class="weapon-slot empty"><span>+</span></div>';
+    },
+  ).join(
+    "",
+  )}</div><div class="loadout-label passive-label">PASSIVES ${ps.length}/6</div><div class="passivebar">${Array.from(
+    { length: 6 },
+    (_, i) => {
+      const k = ps[i];
+      return k
+        ? `<div class="passive-slot" title="${PASSIVES[k].name} ${passives[k]}/5"><span>${PASSIVES[k].glyph}</span><small>${passives[k]}</small></div>`
+        : '<div class="passive-slot empty">·</div>';
+    },
+  ).join(
+    "",
+  )}</div></div><div class="run-hint">V${VERSION} · WASD / ARROWS MOVE · ESC PAUSE</div></div>${bannerTimer > 0 ? `<div class="banner">${bannerText}</div>` : ""}</section>`;
 }
 function spawnEnemy(boss = false, radius?: number) {
   if (enemies.filter((e) => e.alive).length >= 480 && !boss) return;
@@ -462,11 +546,13 @@ function spawnEnemy(boss = false, radius?: number) {
     boss,
     elite,
     hitCd: 0,
+    slow: 0,
   });
   enemies.push(e);
 }
 function damage(e: Enemy, n: number, kx = 0, ky = 0) {
   if (!e.alive) return;
+  if (Math.random() < run.crit) n *= 2;
   e.hp -= n;
   e.flash = 0.12;
   e.vx += kx;
@@ -483,7 +569,8 @@ function damage(e: Enemy, n: number, kx = 0, ky = 0) {
     e.alive = false;
     e.death = 0.38;
     run.kills++;
-    const gain = (e.boss ? 40 : e.elite ? 5 : 1) * (1 + save.meta.gold * 0.1);
+    player.hp = Math.min(player.max, player.hp + run.healKill);
+    const gain = (e.boss ? 40 : e.elite ? 5 : 1) * run.goldGain;
     run.gold += gain;
     gem(e.x, e.y, e.boss ? 25 : e.elite ? 4 : 1);
     for (let i = 0; i < 3; i++)
@@ -545,6 +632,8 @@ function projectile(
   size: number,
   pierce = 1,
 ) {
+  if (bullets.length >= 240) return;
+  life *= run.duration;
   const b = bulletPool.pop() || ({ hit: new Set<Enemy>() } as Bullet);
   b.hit.clear();
   Object.assign(b, {
@@ -558,96 +647,330 @@ function projectile(
     size,
     angle: 0,
     pierce,
+    maxLife: life,
+    returning: false,
+    target: undefined,
+    targetCd: 0,
   });
   bullets.push(b);
 }
 let lightningPaths: { points: { x: number; y: number }[]; life: number }[] = [];
+type Zone = {
+  x: number;
+  y: number;
+  r: number;
+  life: number;
+  max: number;
+  timer: number;
+  damage: number;
+  type: Weapon;
+  triggered: boolean;
+};
+let zones: Zone[] = [];
+function addZone(
+  type: Weapon,
+  x: number,
+  y: number,
+  r: number,
+  damage: number,
+  life: number,
+  delay = 0,
+) {
+  if (zones.length >= 32) return;
+  zones.push({
+    x,
+    y,
+    r,
+    damage,
+    life,
+    max: life,
+    timer: delay,
+    type,
+    triggered: false,
+  });
+}
+function pulse(
+  x: number,
+  y: number,
+  r: number,
+  n: number,
+  k: Weapon,
+  push = 0,
+) {
+  grid.query(x, y, r, (e) => {
+    const dx = e.x - x,
+      dy = e.y - y,
+      d = Math.hypot(dx, dy) || 1;
+    if (d < r) spellHit(e, n, k, (dx / d) * push, (dy / d) * push);
+  });
+}
+function orbitPositions(k: Weapon) {
+  const lv = weapons[k],
+    sig = signature(k),
+    bonus = sig && talentBonus.t0_milestone_10 ? 1 : 0,
+    isBlade = k === "blade",
+    count =
+      (isBlade ? 1 + Math.floor((lv + 1) / 2) : 2 + Math.floor(lv / 2)) +
+      run.amount +
+      bonus +
+      (twin(k) ? 1 : 0) +
+      (evolved.has(k) ? 2 : 0),
+    radius =
+      (isBlade ? 74 + lv * 7 : 125 + lv * 7) * run.area +
+      (sig && talentBonus.t2_milestone_10 ? 30 : 0);
+  return Array.from({ length: Math.min(12, count) }, (_, i) => {
+    const second = isBlade && (twin(k) || evolved.has(k)) && i % 2 === 1,
+      a = run.time * (2 + lv * 0.16) * (second ? -1 : 1) + (i * TAU) / count,
+      r = radius * (second ? 1.22 : 1);
+    return {
+      x: player.x + Math.cos(a) * r,
+      y: player.y + Math.sin(a) * r * 0.65,
+      a,
+      r,
+    };
+  });
+}
+function onCast(k: Weapon) {
+  if (!signature(k)) return;
+  run.signatureCasts++;
+  if (talentBonus.t0_milestone_20 && run.signatureCasts % 4 === 0) {
+    pulse(
+      player.x,
+      player.y,
+      145 * run.area,
+      (12 + weapons[k] * 5) * run.damage,
+      k,
+      70,
+    );
+    addZone("chime", player.x, player.y, 145 * run.area, 0, 0.35);
+  }
+  if (talentBonus.t1_capstone_30) {
+    pulse(player.x, player.y, 100 * run.area, 16 * run.damage, k, 40);
+    player.hp = Math.min(player.max, player.hp + 2);
+    addZone("aura", player.x, player.y, 100 * run.area, 0, 0.35);
+  }
+  if (talentBonus.t2_capstone_30 && run.signatureCasts % 4 === 0)
+    for (let i = 0; i < 8; i++)
+      projectile(
+        "raven",
+        player.x,
+        player.y - 15,
+        (i * TAU) / 8,
+        240,
+        18 * run.damage,
+        2.4,
+        7,
+        2,
+      );
+}
 function attack(dt: number) {
-  for (const k of weaponKeys)
-    if (weapons[k]) {
-      let lv = weapons[k];
-      cooldowns[k] -= dt;
-      if (k === "blade") {
-        const count = 1 + Math.floor((lv + 1) / 2),
-          r = (74 + lv * 7) * run.area;
-        for (let i = 0; i < count; i++) {
-          const a = run.time * (2 + lv * 0.16) + (i * TAU) / count,
-            x = player.x + Math.cos(a) * r,
-            y = player.y + Math.sin(a) * r * 0.65;
-          grid.query(x, y, 29, (e) => {
-            if (
-              e.hitCd <= 0 &&
-              Math.hypot(e.x - x, e.y - y) < 27 + (e.boss ? 20 : 5)
-            ) {
-              damage(
-                e,
-                (10 + lv * 5) * run.damage,
-                Math.cos(a) * 75,
-                Math.sin(a) * 75,
-              );
-              e.hitCd = 0.28 / run.cooldown;
-              player.lunge = 0.12;
-            }
-          });
-        }
-      } else if (cooldowns[k] <= 0) {
-        if (k === "aura") {
-          const r = (72 + lv * 13) * run.area;
-          grid.query(player.x, player.y, r, (e) => {
-            if (Math.hypot(e.x - player.x, (e.y - player.y) * 1.18) < r)
-              damage(
-                e,
-                (5 + lv * 4) * run.damage,
-                (e.x - player.x) * 0.1,
-                (e.y - player.y) * 0.1,
-              );
-          });
-          cooldowns[k] = 0.65 / run.cooldown;
-        } else if (k === "lightning") {
-          let e = nearest(player.x, player.y, 540);
-          const hit = new Set<Enemy>(),
-            points = [{ x: player.x, y: player.y - 35 }];
-          for (let i = 0; i < 2 + lv && e; i++) {
-            hit.add(e);
-            points.push({ x: e.x, y: e.y - e.size * 0.45 });
-            damage(e, (16 + lv * 6) * run.damage);
-            e = nearest(e.x, e.y, 200, hit);
+  for (const k of weaponKeys) {
+    const lv = weapons[k];
+    if (!lv) continue;
+    cooldowns[k] -= dt;
+    const sig = signature(k),
+      extra = run.amount + (sig && talentBonus.t0_milestone_10 ? 1 : 0),
+      ascend = twin(k),
+      evo = evolved.has(k),
+      pierce =
+        1 + Math.floor(lv / 2) + (sig && talentBonus.t2_milestone_10 ? 2 : 0);
+    if (k === "blade" || k === "tempest") {
+      for (const o of orbitPositions(k))
+        grid.query(o.x, o.y, 31, (e) => {
+          if (
+            e.hitCd <= 0 &&
+            Math.hypot(e.x - o.x, e.y - o.y) < 30 + (e.boss ? 16 : 0)
+          ) {
+            spellHit(
+              e,
+              (k === "blade" ? 10 + lv * 5 : 12 + lv * 5) * run.damage,
+              k,
+              Math.cos(o.a) * 85,
+              Math.sin(o.a) * 85,
+            );
+            e.hitCd = 0.28 / run.cooldown;
+            player.lunge = 0.12;
           }
-          if (hit.size) lightningPaths.push({ points, life: 0.25 });
-          cooldowns[k] = (2.1 - lv * 0.12) / run.cooldown;
-          player.lunge = 0.15;
-        } else {
-          const e = nearest(player.x, player.y);
-          if (e) {
-            const x =
-                k === "familiar"
-                  ? player.x + Math.cos(run.time * 1.6) * 60
-                  : player.x,
-              y = k === "familiar" ? player.y - 45 : player.y - 20;
-            let a = Math.atan2(e.y - y, e.x - x);
-            const count =
-              k === "axe"
-                ? 1 + Math.floor(lv / 2)
-                : 1 + Math.floor((lv - 1) / 3);
-            for (let i = 0; i < count; i++)
-              projectile(
-                k,
-                x,
-                y,
-                a + (i - (count - 1) / 2) * 0.17,
-                k === "axe" ? 235 : 350,
-                (k === "axe" ? 20 + lv * 5 : 13 + lv * 5) * run.damage,
-                k === "axe" ? 2.8 : 1.7,
-                k === "axe" ? 17 : 8,
-                k === "axe" ? 5 : 1 + Math.floor(lv / 2),
-              );
-            cooldowns[k] =
-              (k === "axe" ? 1.9 : k === "familiar" ? 1.1 : 0.9) / run.cooldown;
-            player.lunge = 0.15;
-          } else cooldowns[k] = 0.15;
+        });
+      if (cooldowns[k] <= 0) {
+        onCast(k);
+        cooldowns[k] = 0.9 / run.cooldown;
+      }
+      continue;
+    }
+    if (cooldowns[k] > 0) continue;
+    const e = nearest(player.x, player.y, 650);
+    if (!e && k !== "aura" && k !== "mine" && k !== "thorn" && k !== "chime") {
+      cooldowns[k] = 0.15;
+      continue;
+    }
+    onCast(k);
+    let cadence = weaponInfo[k].cadence;
+    if (k === "aura") {
+      let r = (72 + lv * 13) * run.area;
+      if (sig && talentBonus.t2_milestone_10) r += 35;
+      pulse(
+        player.x,
+        player.y,
+        r,
+        (5 + lv * 4 + extra * 2) * run.damage,
+        k,
+        12,
+      );
+      if (evo || ascend) {
+        pulse(player.x, player.y, r * 1.45, (3 + lv * 2) * run.damage, k, 15);
+        addZone("aura", player.x, player.y, r * 1.45, 0, 0.4);
+        if (evo) player.hp = Math.min(player.max, player.hp + 1.5);
+      }
+    } else if (k === "lightning") {
+      const hit = new Set<Enemy>(),
+        points = [{ x: player.x, y: player.y - 35 }];
+      let target = e,
+        last = e;
+      for (
+        let i = 0;
+        i < 2 + lv + extra + (evo ? 4 : 0) + (ascend ? 2 : 0) && target;
+        i++
+      ) {
+        hit.add(target);
+        points.push({ x: target.x, y: target.y - target.size * 0.45 });
+        spellHit(target, (16 + lv * 6) * run.damage, k);
+        last = target;
+        target = nearest(
+          target.x,
+          target.y,
+          200 + (sig && talentBonus.t2_milestone_10 ? 65 : 0),
+          hit,
+        );
+      }
+      if (hit.size) lightningPaths.push({ points, life: 0.23 });
+      if (evo && last) {
+        pulse(last.x, last.y, 105 * run.area, 18 * run.damage, k, 25);
+        addZone("chime", last.x, last.y, 105 * run.area, 0, 0.3);
+      }
+      cadence = Math.max(0.7, 2.1 - lv * 0.12);
+    } else if (k === "comet") {
+      addZone(
+        k,
+        e!.x,
+        e!.y,
+        (65 + lv * 8) * run.area,
+        (28 + lv * 12) * run.damage,
+        0.85,
+        0.55,
+      );
+    } else if (k === "venom") {
+      addZone(
+        k,
+        e!.x,
+        e!.y,
+        (50 + lv * 6) * run.area,
+        (5 + lv * 3) * run.damage,
+        (3 + lv * 0.25) * run.duration,
+        0,
+      );
+    } else if (k === "mine") {
+      addZone(
+        k,
+        player.x + rand(-40, 40),
+        player.y + rand(-30, 30),
+        (65 + lv * 6) * run.area,
+        (25 + lv * 10) * run.damage,
+        7 * run.duration,
+        0.65,
+      );
+    } else if (k === "chime") {
+      pulse(
+        player.x,
+        player.y,
+        (125 + lv * 12) * run.area,
+        (12 + lv * 6) * run.damage,
+        k,
+        140,
+      );
+      addZone(k, player.x, player.y, (125 + lv * 12) * run.area, 0, 0.5);
+    } else if (k === "fissure") {
+      const dx = e!.x - player.x,
+        dy = e!.y - player.y,
+        d = Math.hypot(dx, dy) || 1,
+        nx = dx / d,
+        ny = dy / d,
+        length = 450 + lv * 20;
+      grid.query(player.x, player.y, length, (o) => {
+        const ox = o.x - player.x,
+          oy = o.y - player.y,
+          along = ox * nx + oy * ny;
+        if (
+          along > 0 &&
+          along < length &&
+          Math.abs(ox * ny - oy * nx) < (20 + lv * 4) * run.area
+        )
+          spellHit(o, (18 + lv * 8) * run.damage, k, nx * 50, ny * 50);
+      });
+      lightningPaths.push({
+        points: [
+          { x: player.x, y: player.y },
+          { x: player.x + nx * length, y: player.y + ny * length },
+        ],
+        life: 0.3,
+      });
+    } else if (k === "thorn") {
+      const count = Math.min(16, 6 + lv + extra);
+      for (let i = 0; i < count; i++)
+        projectile(
+          k,
+          player.x,
+          player.y - 10,
+          (i * TAU) / count + run.time,
+          240,
+          (12 + lv * 4) * run.damage,
+          1.9,
+          8,
+          pierce,
+        );
+    } else {
+      const units = k === "familiar" ? (evo ? 3 : ascend ? 2 : 1) : 1;
+      for (let u = 0; u < units; u++) {
+        let x = player.x,
+          y = player.y - 20;
+        if (k === "familiar") {
+          x += Math.cos(run.time * 1.6 + (u * TAU) / units) * 60;
+          y -= 25 + Math.sin(run.time * 1.6 + (u * TAU) / units) * 20;
+        }
+        let angle = Math.atan2(e!.y - 15 - y, e!.x - x),
+          count =
+            k === "ember"
+              ? 3 + Math.floor(lv / 2) + extra
+              : k === "raven"
+                ? 2 + Math.floor(lv / 2) + extra
+                : k === "axe"
+                  ? 1 + Math.floor(lv / 2) + extra
+                  : 1 + Math.floor((lv - 1) / 3) + extra;
+        if (ascend && k === "bolt") count += 2;
+        count = Math.min(8, count);
+        for (let i = 0; i < count; i++) {
+          const spread = k === "ember" ? 0.21 : 0.14;
+          projectile(
+            k,
+            x,
+            y,
+            angle + (i - (count - 1) / 2) * spread,
+            k === "lance" ? 550 : k === "axe" || k === "scythe" ? 235 : 350,
+            (k === "axe"
+              ? 20 + lv * 5
+              : k === "lance"
+                ? 20 + lv * 7
+                : 13 + lv * 5) * run.damage,
+            k === "lance" ? 1.4 : k === "axe" || k === "scythe" ? 2.8 : 1.8,
+            k === "axe" || k === "scythe" ? 16 : k === "lance" ? 11 : 8,
+            k === "lance" ? 5 + lv : k === "axe" || k === "scythe" ? 5 : pierce,
+          );
         }
       }
     }
+    cooldowns[k] = cadence / run.cooldown;
+    player.lunge = 0.15;
+  }
 }
 function update(dt: number) {
   run.time += dt;
@@ -695,6 +1018,7 @@ function update(dt: number) {
       continue;
     }
     e.hitCd -= dt;
+    e.slow = Math.max(0, e.slow - dt);
     e.flash = Math.max(0, e.flash - dt);
     const dx = player.x - e.x,
       dy = player.y - e.y,
@@ -712,7 +1036,10 @@ function update(dt: number) {
         e.y += (sy / sd) * force;
       }
     });
-    const speed = e.speed * (e.boss ? 1 + Math.sin(run.time) * 0.25 : 1);
+    const speed =
+      e.speed *
+      (e.boss ? 1 + Math.sin(run.time) * 0.25 : 1) *
+      (e.slow > 0 ? 0.6 : 1);
     e.x += ((dx / d) * speed + e.vx) * dt;
     e.y += ((dy / d) * speed * 0.8 + e.vy) * dt;
     e.vx *= Math.max(0, 1 - dt * 9);
@@ -723,16 +1050,11 @@ function update(dt: number) {
       e.y = player.y + Math.sin(a) * 500;
     }
     if (d < (e.boss ? 38 : 22) && player.invuln <= 0) {
-      player.hp -= e.boss ? 24 : e.elite ? 12 : 7;
+      const taken = Math.max(1, (e.boss ? 24 : e.elite ? 12 : 7) - run.armor);
+      player.hp -= taken;
       player.invuln = 0.72;
       player.flash = 0.2;
-      fx(
-        player.x,
-        player.y - 75,
-        e.boss ? "-24" : e.elite ? "-12" : "-7",
-        "#a84336",
-        20,
-      );
+      fx(player.x, player.y - 75, "-" + Math.round(taken), "#a84336", 20);
       e.vx = (-dx / d) * 140;
       e.vy = (-dy / d) * 140;
       if (player.hp <= 0) {
@@ -753,11 +1075,43 @@ function update(dt: number) {
   }
   grid.build(enemies);
   attack(dt);
+  for (const z of zones) {
+    z.life -= dt;
+    z.timer -= dt;
+    if (z.damage > 0 && z.timer <= 0) {
+      if (z.type === "venom") {
+        pulse(z.x, z.y, z.r, z.damage, z.type);
+        z.timer = 0.6;
+      } else if (z.type === "comet" && !z.triggered) {
+        pulse(z.x, z.y, z.r, z.damage, z.type, 90);
+        z.triggered = true;
+        z.life = 0.3;
+      } else if (z.type === "mine" && !z.triggered) {
+        const target = nearest(z.x, z.y, 50);
+        if (target) {
+          pulse(z.x, z.y, z.r, z.damage, z.type, 100);
+          z.triggered = true;
+          z.life = 0.3;
+        }
+      }
+    }
+  }
+  zones = zones.filter((z) => z.life > 0);
   for (const b of bullets) {
     b.life -= dt;
     if (b.life <= 0) continue;
-    if (b.type === "familiar") {
-      const t = nearest(b.x, b.y, 220, b.hit);
+    if (
+      b.type === "familiar" ||
+      b.type === "raven" ||
+      (signature(b.type) && !!talentBonus.t2_milestone_10) ||
+      (b.type === "bolt" && evolved.has("bolt"))
+    ) {
+      b.targetCd -= dt;
+      if (b.targetCd <= 0 || !b.target?.alive || b.hit.has(b.target)) {
+        b.target = nearest(b.x, b.y, 220, b.hit);
+        b.targetCd = 0.14;
+      }
+      const t = b.target;
       if (t) {
         let a = Math.atan2(t.y - b.y, t.x - b.x);
         b.vx += (Math.cos(a) * 330 - b.vx) * dt * 4;
@@ -767,7 +1121,19 @@ function update(dt: number) {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     b.angle += dt * 9;
-    if (b.type === "axe") b.vy += dt * 75;
+    const returns =
+      b.type === "scythe" ||
+      (b.type === "axe" && (evolved.has("axe") || twin("axe")));
+    if (returns && b.maxLife - b.life > 0.75) {
+      if (!b.returning) {
+        b.returning = true;
+        b.hit.clear();
+      }
+      const angle = Math.atan2(player.y - 15 - b.y, player.x - b.x);
+      b.vx += (Math.cos(angle) * 320 - b.vx) * dt * 5;
+      b.vy += (Math.sin(angle) * 320 - b.vy) * dt * 5;
+      if (Math.hypot(b.x - player.x, b.y - player.y + 15) < 15) b.life = 0;
+    } else if (b.type === "axe") b.vy += dt * 75;
     grid.query(b.x, b.y, 38, (e) => {
       if (
         b.life > 0 &&
@@ -775,7 +1141,11 @@ function update(dt: number) {
         Math.hypot(e.x - b.x, e.y - 18 - b.y) < (e.boss ? 40 : 25)
       ) {
         b.hit.add(e);
-        damage(e, b.damage, b.vx * 0.18, b.vy * 0.18);
+        spellHit(e, b.damage, b.type, b.vx * 0.18, b.vy * 0.18);
+        if (b.type === "bolt" && (evolved.has("bolt") || twin("bolt"))) {
+          pulse(e.x, e.y, 55 * run.area, b.damage * 0.45, b.type);
+          addZone("comet", e.x, e.y, 55 * run.area, 0, 0.22);
+        }
         b.pierce--;
         if (b.pierce <= 0) b.life = 0;
       }
@@ -792,7 +1162,7 @@ function update(dt: number) {
         g.y += (dy / Math.max(1, d)) * (230 + 350 * (1 - d / run.magnet)) * dt;
         if (d < 18) {
           g.active = false;
-          run.xp += g.value;
+          if (!qaFreezeProgression) run.xp += g.value * run.xpGain;
           fx(player.x, player.y - 45, "", "#9ec99b", 3);
         }
       }
@@ -844,108 +1214,231 @@ function update(dt: number) {
   }
 }
 
+type Rarity = "common" | "uncommon" | "rare" | "epic";
 type Upgrade = {
   id: string;
+  kind: "spell" | "passive" | "supply";
   name: string;
   glyph: string;
   desc: string;
   tier: string;
+  rarity: Rarity;
+  grant: number;
   apply: () => void;
 };
 let choices: Upgrade[] = [];
+function rollRarity(): Rarity {
+  const r = Math.random(),
+    luck = Math.min(0.65, run.luck);
+  return r < 0.045 + luck * 0.16
+    ? "epic"
+    : r < 0.2 + luck * 0.26
+      ? "rare"
+      : r < 0.49 + luck * 0.22
+        ? "uncommon"
+        : "common";
+}
+function recipeText(k: Weapon) {
+  const evo = EVOLUTIONS[k];
+  return evo
+    ? `${weaponInfo[k].name} Lv6 + ${PASSIVES[evo.passive].name} Lv${evo.rank} → ${evo.name}.`
+    : "";
+}
+function checkEvolutions() {
+  for (const k of weaponKeys) {
+    const evo = EVOLUTIONS[k];
+    if (
+      evo &&
+      !evolved.has(k) &&
+      weapons[k] >= weaponInfo[k].max &&
+      passives[evo.passive] >= evo.rank
+    ) {
+      evolved.add(k);
+      banner(evo.name, "EVOLUTION AWAKENED");
+      for (let i = 0; i < 14; i++)
+        fx(player.x, player.y - 25, "", "#e8cd8b", rand(3, 7));
+    }
+  }
+}
+function draftPool(): Upgrade[] {
+  const pool: Upgrade[] = [],
+    spellCount = weaponKeys.filter((k) => weapons[k] > 0).length,
+    passiveCount = PASSIVE_KEYS.filter((k) => passives[k] > 0).length;
+  for (const k of weaponKeys)
+    if (
+      !banished.has(k) &&
+      weapons[k] < weaponInfo[k].max &&
+      (weapons[k] > 0 || spellCount < 6)
+    ) {
+      const rarity = rollRarity(),
+        grant = rarity === "epic" ? 2 : 1,
+        target = Math.min(weaponInfo[k].max, weapons[k] + grant);
+      pool.push({
+        id: k,
+        kind: "spell",
+        name: evolved.has(k) ? EVOLUTIONS[k]!.name : weaponInfo[k].name,
+        glyph: weaponInfo[k].glyph,
+        rarity,
+        grant,
+        desc: weaponInfo[k].desc + " " + recipeText(k),
+        tier: weapons[k]
+          ? `SPELL · ${weapons[k]} → ${target} / 6`
+          : `NEW SPELL · LEVEL ${target}`,
+        apply: () => {
+          weapons[k] = target;
+          cooldowns[k] = 0;
+        },
+      });
+    }
+  for (const k of PASSIVE_KEYS)
+    if (
+      !banished.has(k) &&
+      passives[k] < PASSIVES[k].max &&
+      (passives[k] > 0 || passiveCount < 6)
+    ) {
+      const rarity = rollRarity(),
+        grant = rarity === "epic" ? 2 : 1,
+        target = Math.min(PASSIVES[k].max, passives[k] + grant);
+      pool.push({
+        id: k,
+        kind: "passive",
+        name: PASSIVES[k].name,
+        glyph: PASSIVES[k].glyph,
+        rarity,
+        grant,
+        desc: PASSIVES[k].desc,
+        tier: passives[k]
+          ? `PASSIVE · ${passives[k]} → ${target} / 5`
+          : `NEW PASSIVE · LEVEL ${target}`,
+        apply: () => {
+          passives[k] = target;
+          recalculateStats();
+        },
+      });
+    }
+  return pool;
+}
+function dealDraft() {
+  const pool = draftPool();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  choices = pool.slice(0, 3);
+  const supplies: Upgrade[] = [
+    {
+      id: "supply-gold",
+      kind: "supply",
+      name: "Pilgrim Purse",
+      glyph: "◇",
+      desc: "The slots are full. Take 35 run gold instead.",
+      tier: "SUPPLY · GOLD",
+      rarity: "common",
+      grant: 1,
+      apply: () => (run.gold += 35),
+    },
+    {
+      id: "supply-heal",
+      kind: "supply",
+      name: "Restful Waters",
+      glyph: "♡",
+      desc: "Restore 30 vitality without taking a slot.",
+      tier: "SUPPLY · RECOVERY",
+      rarity: "uncommon",
+      grant: 1,
+      apply: () => (player.hp = Math.min(player.max, player.hp + 30)),
+    },
+    {
+      id: "supply-xp",
+      kind: "supply",
+      name: "Memory Fragment",
+      glyph: "◈",
+      desc: "Take 10 experience without taking a slot.",
+      tier: "SUPPLY · MEMORY",
+      rarity: "rare",
+      grant: 1,
+      apply: () => (run.xp += 10),
+    },
+  ];
+  while (choices.length < 3) choices.push(supplies[choices.length]);
+}
+function showDraft() {
+  document.querySelector(".draft-shade")?.remove();
+  const spellCount = weaponKeys.filter((k) => weapons[k]).length,
+    passiveCount = PASSIVE_KEYS.filter((k) => passives[k]).length;
+  $.insertAdjacentHTML(
+    "beforeend",
+    `<div class="modal-shade draft-shade"><section class="modal draft-modal"><div class="draft-top"><span class="eyebrow">Level ${run.level} · ${pendingDrafts ? "First Light bonus" : "A soul awakened"}</span><span class="draft-capacity">SPELLS ${spellCount}/6 <i>·</i> PASSIVES ${passiveCount}/6</span></div><h2>${banishMode ? "Sever a possibility." : "Choose your power."}</h2><p>${banishMode ? "Tap a card to banish it for this expedition, then receive a fresh draft." : "18 spells. 16 passives. A different path every time."}</p><div class="choices ${banishMode ? "banishing" : ""}">${choices.map((c, i) => `<button class="upgrade rarity-${c.rarity}" data-upgrade="${i}" data-card-id="${c.id}" ${banishMode && c.kind === "supply" ? "disabled" : ""}><div class="card-rarity">${c.rarity.toUpperCase()} <span>${c.kind === "spell" ? "✦" : "◈"}</span></div><span class="glyph">${c.glyph}</span><span class="tier">${c.tier}</span><h3>${c.name}</h3><p>${c.desc}</p><span class="choose">${banishMode ? "⊘ Banish this card" : c.rarity === "epic" ? "+2 ranks · Claim ↗" : c.rarity === "rare" ? "+12 gold · Claim ↗" : c.rarity === "uncommon" ? "+5 vitality · Claim ↗" : "Claim this blessing ↗"}</span></button>`).join("")}</div><div class="draft-actions"><button data-action="reroll" ${draftCharges.reroll ? "" : "disabled"}>⟳ Reroll <b>${draftCharges.reroll}</b></button><button data-action="skip-draft" ${draftCharges.skip ? "" : "disabled"}>↷ Skip for ◇ ${20 + run.level * 2} <b>${draftCharges.skip}</b></button><button data-action="banish" class="${banishMode ? "active" : ""}" ${draftCharges.banish && choices.some((c) => c.kind !== "supply") ? "" : "disabled"}>⊘ ${banishMode ? "Cancel banish" : "Banish"} <b>${draftCharges.banish}</b></button></div><details class="recipes"><summary>Six evolution recipes · Max spell + matching passive</summary><div>${Object.entries(
+      EVOLUTIONS,
+    )
+      .map(
+        ([key, e]) =>
+          `<p><b>${e.name}</b><br>${weaponInfo[key as Weapon].name} 6 + ${PASSIVES[e.passive].name} ${e.rank}</p>`,
+      )
+      .join(
+        "",
+      )}</div></details><p class="close-hint">Time stands still. [1] [2] [3] choose · Charges renew next run. Uncommon heals 5, rare grants 12 gold, epic grants 2 ranks.</p></section></div>`,
+  );
+}
 function levelUp() {
   screen = "levelup";
   document.body.classList.remove("playing");
-  const pool: Upgrade[] = weaponKeys
-    .filter((k) => weapons[k] < 5)
-    .map((k) => ({
-      id: k,
-      name: weaponInfo[k].name,
-      glyph: weaponInfo[k].glyph,
-      desc: weapons[k]
-        ? `Level ${weapons[k] + 1}: more damage, wider reach, and greater power.`
-        : weaponInfo[k].desc,
-      tier: weapons[k]
-        ? `WEAPON · LEVEL ${weapons[k]} → ${weapons[k] + 1}`
-        : "NEW WEAPON",
-      apply: () => {
-        weapons[k]++;
-        cooldowns[k] = 0;
-      },
-    }));
-  pool.push(
-    {
-      id: "power",
-      name: "Rising Power",
-      glyph: "✹",
-      desc: "+15% damage for every weapon.",
-      tier: "PASSIVE · MIGHT",
-      apply: () => (run.damage += 0.15),
-    },
-    {
-      id: "haste",
-      name: "Quickening",
-      glyph: "»",
-      desc: "Weapons strike 12% more often.",
-      tier: "PASSIVE · HASTE",
-      apply: () => (run.cooldown += 0.12),
-    },
-    {
-      id: "reach",
-      name: "Soul Harvest",
-      glyph: "◎",
-      desc: "+35% experience pickup range.",
-      tier: "PASSIVE · REACH",
-      apply: () => (run.magnet *= 1.35),
-    },
-    {
-      id: "vitality",
-      name: "Wild Heart",
-      glyph: "♡",
-      desc: "+25 maximum vitality. Heal 30 vitality.",
-      tier: "PASSIVE · VITALITY",
-      apply: () => {
-        player.max += 25;
-        player.hp = Math.min(player.max, player.hp + 30);
-      },
-    },
-    {
-      id: "swiftness",
-      name: "Lightfoot",
-      glyph: "➶",
-      desc: "+10% movement speed.",
-      tier: "PASSIVE · AGILITY",
-      apply: () => (run.speed += 0.1),
-    },
-    {
-      id: "area",
-      name: "Widening Rift",
-      glyph: "◉",
-      desc: "+15% size to blades and hallowed ground.",
-      tier: "PASSIVE · AREA",
-      apply: () => (run.area += 0.15),
-    },
-    {
-      id: "regen",
-      name: "Living Spring",
-      glyph: "❧",
-      desc: "Regenerate 0.5 vitality every second.",
-      tier: "PASSIVE · RENEWAL",
-      apply: () => (run.regen += 0.5),
-    },
-  );
-  choices = pool.sort(() => Math.random() - 0.5).slice(0, 3);
-  $.insertAdjacentHTML(
-    "beforeend",
-    `<div class="modal-shade"><section class="modal"><div class="eyebrow">Level ${run.level} · A soul awakened</div><h2>Choose your power.</h2><p>The Hollow grows stronger. So do you.</p><div class="choices">${choices.map((c, i) => `<button class="upgrade" data-upgrade="${i}"><span class="glyph">${c.glyph}</span><span class="tier">${c.tier}</span><h3>${c.name}</h3><p>${c.desc}</p><span class="choose">${i + 1} &nbsp; Claim this blessing &nbsp; ↗</span></button>`).join("")}</div><p class="close-hint">Time stands still. Choose with care. &nbsp; [1] [2] [3]</p></section></div>`,
-  );
+  banishMode = false;
+  dealDraft();
+  showDraft();
 }
-function choose(i: number) {
-  if (screen !== "levelup" || !choices[i]) return;
-  choices[i].apply();
+function resumeDraft() {
+  banishMode = false;
+  if (pendingDrafts > 0) {
+    pendingDrafts--;
+    if (pendingDrafts > 0) {
+      levelUp();
+      return;
+    }
+  }
   screen = "run";
   document.body.classList.add("playing");
   hud();
+}
+function choose(i: number) {
+  if (screen !== "levelup" || !choices[i]) return;
+  const c = choices[i];
+  if (banishMode) {
+    if (c.kind === "supply") {
+      notify("Supply cards do not occupy slots and cannot be banished.");
+      return;
+    }
+    if (draftCharges.banish <= 0) return;
+    draftCharges.banish--;
+    banished.add(c.id);
+    banishMode = false;
+    dealDraft();
+    showDraft();
+    return;
+  }
+  c.apply();
+  if (c.rarity === "uncommon") player.hp = Math.min(player.max, player.hp + 5);
+  if (c.rarity === "rare") run.gold += 12;
+  checkEvolutions();
+  resumeDraft();
+}
+function draftAction(action: string) {
+  if (screen !== "levelup") return;
+  if (action === "reroll" && draftCharges.reroll > 0) {
+    draftCharges.reroll--;
+    banishMode = false;
+    dealDraft();
+    showDraft();
+  }
+  if (action === "banish" && draftCharges.banish > 0) {
+    banishMode = !banishMode;
+    showDraft();
+  }
+  if (action === "skip-draft" && draftCharges.skip > 0) {
+    draftCharges.skip--;
+    run.gold += 20 + run.level * 2;
+    resumeDraft();
+  }
 }
 function pause() {
   if (screen === "run") {
@@ -963,16 +1456,19 @@ function pause() {
 }
 function finishRun() {
   if (!run.earned) {
-    run.gold += Math.floor(run.time / 8) * (1 + save.meta.gold * 0.1);
+    run.gold += Math.floor(run.time / 8) * run.goldGain;
     save.gold += Math.floor(run.gold);
     save.best = Math.max(save.best, run.time);
     save.runs++;
+    run.talentXP = Math.floor(run.time * 2 + run.kills * 3 + run.bosses * 150);
+    save.heroes[selected.id].xp += run.talentXP;
     run.earned = true;
     persist();
   }
+  talentHeroId = selected.id;
   screen = "dead";
   document.body.classList.remove("playing");
-  $.innerHTML = `<div class="modal-shade"><section class="modal" style="max-width:650px"><div class="eyebrow">The Hollow remembers</div><h2>Not the end. A beginning.</h2><p>${selected.name}'s watch is over. Your hard-earned power remains.</p><div class="statsgrid"><div class="stat"><b>${formatTime(run.time)}</b><small>SURVIVED</small></div><div class="stat"><b>${run.kills}</b><small>FOES SLAIN</small></div><div class="stat"><b>${run.level}</b><small>SOUL LEVEL</small></div><div class="stat"><b>◇ ${Math.floor(run.gold)}</b><small>GOLD EARNED</small></div></div><div class="death-buttons"><button class="primary" data-action="shop">Visit the Sanctum ↗</button><button class="secondary" data-action="title">Choose a wanderer</button></div><p class="close-hint">All gold has been saved · Best expedition ${formatTime(save.best)}</p></section></div>`;
+  $.innerHTML = `<div class="modal-shade"><section class="modal" style="max-width:650px"><div class="eyebrow">The Hollow remembers</div><h2>Not the end. A beginning.</h2><p>${selected.name}'s watch is over. Your hard-earned power remains.</p><div class="statsgrid"><div class="stat"><b>${formatTime(run.time)}</b><small>SURVIVED</small></div><div class="stat"><b>${run.kills}</b><small>FOES SLAIN</small></div><div class="stat"><b>${run.level}</b><small>SOUL LEVEL</small></div><div class="stat"><b>◇ ${Math.floor(run.gold)}</b><small>GOLD EARNED</small></div></div><div class="death-buttons"><button class="primary" data-action="shop">Visit the Sanctum ↗</button><button class="secondary" data-action="talents">Spend talents</button><button class="secondary" data-action="title">Choose a wanderer</button></div><p class="close-hint">+${run.talentXP} ${selected.name} talent XP · ${earnedPoints(save.heroes[selected.id].xp) - totalSpent(save.heroes[selected.id])} unspent points · All gold saved</p></section></div>`;
 }
 
 const ground = document.createElement("canvas");
@@ -1024,6 +1520,25 @@ function numberSprite(text: string, color: string, size: number) {
   t.fillStyle = color;
   t.fillText(text, 36, 23);
   numbers.set(key, c);
+  return c;
+}
+const sparks = new Map<Weapon, HTMLCanvasElement>();
+function sparkSprite(type: Weapon) {
+  let c = sparks.get(type);
+  if (c) return c;
+  c = document.createElement("canvas");
+  c.width = 24;
+  c.height = 24;
+  const t = c.getContext("2d")!;
+  t.fillStyle = weaponInfo[type].color;
+  t.beginPath();
+  t.ellipse(12, 12, 10, 7, 0, 0, TAU);
+  t.fill();
+  t.fillStyle = "#f5f0d5";
+  t.beginPath();
+  t.arc(11, 11, 3.5, 0, TAU);
+  t.fill();
+  sparks.set(type, c);
   return c;
 }
 const shadowImage = document.createElement("canvas");
@@ -1303,70 +1818,144 @@ function sprite(
   }
 }
 function drawWeapons() {
-  const px = player.x,
-    py = player.y;
-  let [x, y] = screenXY(px, py);
+  const [x, y] = screenXY(player.x, player.y);
   if (weapons.aura) {
-    const r = (72 + weapons.aura * 13) * run.area;
-    ctx.fillStyle = "#e1d19623";
-    ctx.strokeStyle = "#e7d3968c";
-    ctx.lineWidth = 2;
+    const r =
+      (72 + weapons.aura * 13) * run.area +
+      (signature("aura") && talentBonus.t2_milestone_10 ? 35 : 0);
+    ctx.fillStyle = evolved.has("aura") ? "#e9cc7e35" : "#e1d19623";
+    ctx.strokeStyle = "#e7d3969c";
+    ctx.lineWidth = evolved.has("aura") ? 3 : 2;
     ctx.beginPath();
     ctx.ellipse(x, y, r, r * 0.68, 0, 0, TAU);
     ctx.fill();
     ctx.stroke();
-    ctx.setLineDash([7, 13]);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(x, y, r * 0.86, r * 0.58, 0, 0, TAU);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-  if (weapons.blade) {
-    const lv = weapons.blade,
-      count = 1 + Math.floor((lv + 1) / 2),
-      r = (74 + lv * 7) * run.area;
-    ctx.strokeStyle = "#e7d9ac2b";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(x, y, r, r * 0.65, 0, 0, TAU);
-    ctx.stroke();
-    for (let i = 0; i < count; i++) {
-      const a = run.time * (2 + lv * 0.16) + (i * TAU) / count;
-      ctx.save();
-      ctx.translate(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.65 - 10);
-      ctx.rotate(a + Math.PI / 4);
-      polygon(
-        [
-          [0, -23],
-          [8, -5],
-          [4, 12],
-          [-4, 12],
-          [-6, -5],
-        ],
-        "#e7ddbd",
-        "#8b986f",
-      );
-      ctx.fillStyle = "#91714a";
-      ctx.fillRect(-8, 8, 16, 4);
-      ctx.fillRect(-2, 12, 4, 10);
-      ctx.restore();
+    if (evolved.has("aura") || twin("aura")) {
+      ctx.strokeStyle = "#e4c67688";
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * 1.45, r * 0.98, 0, 0, TAU);
+      ctx.stroke();
     }
   }
+  for (const k of ["blade", "tempest"] as Weapon[])
+    if (weapons[k])
+      for (const o of orbitPositions(k)) {
+        const [bx, by] = screenXY(o.x, o.y);
+        ctx.save();
+        ctx.translate(bx, by - 10);
+        if (k === "blade") {
+          ctx.rotate(o.a + Math.PI / 4);
+          polygon(
+            [
+              [0, -23],
+              [8, -5],
+              [4, 12],
+              [-4, 12],
+              [-6, -5],
+            ],
+            evolved.has(k) ? "#f5d58e" : "#e7ddbd",
+            evolved.has(k) ? "#ac8945" : "#8b986f",
+          );
+          ctx.fillStyle = "#91714a";
+          ctx.fillRect(-8, 8, 16, 4);
+          ctx.fillRect(-2, 12, 4, 10);
+        } else {
+          ctx.fillStyle = "#d6e4bc";
+          ctx.strokeStyle = "#8aab73";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, 10, 0, TAU);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = "#eff2d5";
+          ctx.beginPath();
+          ctx.arc(-2, -3, 3, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
   if (weapons.familiar) {
-    let a = run.time * 1.6,
-      fx = x + Math.cos(a) * 60,
-      fy = y - 45 + Math.sin(a) * 20;
-    ctx.fillStyle = "#d9bdd5";
-    ctx.beginPath();
-    ctx.arc(fx, fy, 9, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = "#f8ebdc";
-    ctx.beginPath();
-    ctx.arc(fx - 2, fy - 2, 3, 0, TAU);
-    ctx.fill();
+    const count = evolved.has("familiar") ? 3 : twin("familiar") ? 2 : 1;
+    for (let i = 0; i < count; i++) {
+      const a = run.time * 1.6 + (i * TAU) / count,
+        fx = x + Math.cos(a) * 60,
+        fy = y - 45 + Math.sin(a) * 20;
+      ctx.fillStyle = evolved.has("familiar") ? "#f3d39a" : "#d9bdd5";
+      ctx.beginPath();
+      ctx.arc(fx, fy, 9, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#f8ebdc";
+      ctx.beginPath();
+      ctx.arc(fx - 2, fy - 2, 3, 0, TAU);
+      ctx.fill();
+    }
   }
 }
+function drawZones() {
+  for (const z of zones) {
+    const [x, y] = screenXY(z.x, z.y),
+      fade = Math.min(1, z.life / 0.3),
+      r = z.type === "chime" ? z.r * (1 - z.life / z.max) : z.r;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle =
+      z.type === "venom"
+        ? "#789b7040"
+        : z.type === "comet"
+          ? "#ecd4a544"
+          : "#d8c28825";
+    ctx.strokeStyle =
+      z.type === "venom"
+        ? "#8caa7f9c"
+        : z.type === "comet"
+          ? "#dbc08fb0"
+          : "#b59c6c99";
+    ctx.lineWidth = 2;
+    if (z.type === "mine" && !z.triggered) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.PI / 4);
+      ctx.strokeRect(-12, -12, 24, 24);
+      ctx.restore();
+      ctx.font = "16px Georgia";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#927c55";
+      ctx.fillText("✧", x, y + 4);
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(x, y, r, r * 0.65, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      if (z.type === "comet" && !z.triggered) {
+        ctx.fillStyle = "#e7d5a3";
+        ctx.beginPath();
+        ctx.arc(x, y - z.timer * 180, 9, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+function gemBitmap(fill: string) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 14;
+  const t = c.getContext("2d")!;
+  t.fillStyle = fill;
+  t.strokeStyle = "#6d9168";
+  t.lineWidth = 1;
+  t.beginPath();
+  t.moveTo(7, 2);
+  t.lineTo(11, 7);
+  t.lineTo(7, 12);
+  t.lineTo(3, 7);
+  t.closePath();
+  t.fill();
+  t.stroke();
+  t.fillStyle = "#e4edce";
+  t.fillRect(6, 4, 2, 3);
+  return c;
+}
+const gemImage = gemBitmap("#c5d8b0"),
+  richGemImage = gemBitmap("#e3c77c");
 function render() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (!["run", "levelup", "paused", "dead"].includes(screen)) {
@@ -1376,23 +1965,13 @@ function render() {
     return;
   }
   drawGround();
+  drawZones();
   drawWeapons();
   for (const g of gems) {
     let [x, y] = screenXY(g.x, g.y);
     if (x < -10 || x > W + 10 || y < -10 || y > H + 10) continue;
     const bob = Math.sin(g.age * 3) * 1.5;
-    polygon(
-      [
-        [x, y - 8 - bob],
-        [x + 4, y - 3 - bob],
-        [x, y + 2 - bob],
-        [x - 4, y - 3 - bob],
-      ],
-      g.value > 3 ? "#e3c77c" : "#c5d8b0",
-      "#6d9168",
-    );
-    ctx.fillStyle = "#e4edce";
-    ctx.fillRect(x - 1, y - 6 - bob, 2, 3);
+    ctx.drawImage(g.value > 3 ? richGemImage : gemImage, x - 7, y - 10 - bob);
   }
   const sorted: (Enemy | typeof player)[] = [...enemies, player];
   sorted.sort((a, b) => a.y - b.y);
@@ -1441,10 +2020,64 @@ function render() {
   }
   for (const b of bullets) {
     let [x, y] = screenXY(b.x, b.y);
+    if (
+      !["axe", "scythe", "lance", "frost", "thorn", "raven"].includes(b.type)
+    ) {
+      const size = b.size * 2.4;
+      ctx.drawImage(
+        sparkSprite(b.type),
+        x - size / 2,
+        y - size / 2,
+        size,
+        size,
+      );
+      continue;
+    }
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(b.angle);
-    if (b.type === "axe") {
+    ctx.rotate(
+      b.type === "lance" || b.type === "frost" || b.type === "raven"
+        ? Math.atan2(b.vy, b.vx)
+        : b.angle,
+    );
+    if (b.type === "scythe") {
+      ctx.strokeStyle = weaponInfo[b.type].color;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 15, 0.1, Math.PI * 1.55);
+      ctx.stroke();
+    } else if (b.type === "lance") {
+      polygon(
+        [
+          [-20, 0],
+          [8, -4],
+          [22, 0],
+          [8, 4],
+        ],
+        "#c2dcd4",
+        "#78988b",
+      );
+    } else if (b.type === "frost" || b.type === "thorn") {
+      polygon(
+        [
+          [-12, 0],
+          [0, -5],
+          [14, 0],
+          [0, 5],
+        ],
+        weaponInfo[b.type].color,
+      );
+    } else if (b.type === "raven") {
+      polygon(
+        [
+          [-11, -8],
+          [8, 0],
+          [-11, 8],
+          [0, 0],
+        ],
+        "#b6a8c6",
+      );
+    } else if (b.type === "axe") {
       ctx.fillStyle = "#7f6147";
       ctx.fillRect(-2, -15, 4, 30);
       polygon(
@@ -1529,6 +2162,45 @@ resize();
 $.addEventListener("click", (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>("button");
   if (!el || el.hasAttribute("disabled")) return;
+  if (el.dataset.filter) {
+    shopFilter = el.dataset.filter;
+    shop();
+    return;
+  }
+  if (el.dataset.talenthero) {
+    talentHeroId = el.dataset.talenthero;
+    inspectedTalent = "";
+    talents();
+    return;
+  }
+  if (el.dataset.talent) {
+    inspectedTalent = el.dataset.talent;
+    talents();
+    return;
+  }
+  if (el.dataset.talentBuy) {
+    const found = locateTalent(el.dataset.talentBuy);
+    if (found && buyTalent(found.tree, found.node, save.heroes[talentHeroId])) {
+      persist();
+      talents();
+    }
+    return;
+  }
+  if (el.dataset.talentRefund) {
+    const found = locateTalent(el.dataset.talentRefund);
+    if (found) {
+      const count = refundTalent(
+        found.tree,
+        found.node,
+        save.heroes[talentHeroId],
+      );
+      persist();
+      talents();
+      if (count > 1)
+        notify(`${count} points refunded, including dependent talents.`);
+    }
+    return;
+  }
   if (el.dataset.hero) {
     selected = heroes.find((a) => a.id === el.dataset.hero)!;
     save.selected = selected.id;
@@ -1555,6 +2227,21 @@ $.addEventListener("click", (e) => {
   switch (el.dataset.action) {
     case "title":
       title();
+      break;
+    case "talents":
+      talentHeroId = selected.id;
+      talents();
+      break;
+    case "respec":
+      save.heroes[talentHeroId].spent = {};
+      persist();
+      talents();
+      notify("All points refunded. Respecs are always free.");
+      break;
+    case "reroll":
+    case "skip-draft":
+    case "banish":
+      draftAction(el.dataset.action);
       break;
     case "shop":
       shop();
@@ -1702,6 +2389,35 @@ async function init() {
     player: { x: player.x, y: player.y },
     weapons: { ...weapons },
     meta: { ...save.meta },
+    version: VERSION,
+    passives: { ...passives },
+    evolved: [...evolved],
+    draftCharges: { ...draftCharges },
+    banished: [...banished],
+    choices: choices.map((c) => ({ id: c.id, kind: c.kind, rarity: c.rarity })),
+    heroProgress: structuredClone(save.heroes),
+    talentBonus: { ...talentBonus },
+    stats: {
+      damage: run.damage,
+      signatureDamage: run.signatureDamage,
+      haste: run.cooldown,
+      armor: run.armor,
+      area: run.area,
+      regen: run.regen,
+      amount: run.amount,
+    },
+    signatureCasts: run.signatureCasts,
+    orbitCount: weapons.blade ? orbitPositions("blade").length : 0,
+    talentXP: run.talentXP,
+    zones: zones.length,
+    counts: {
+      spells: weaponKeys.length,
+      passives: PASSIVE_KEYS.length,
+      evolutions: Object.keys(EVOLUTIONS).length,
+      shop: metaInfo.length,
+      talents: 144,
+      trees: 18,
+    },
     bosses: enemies.filter((e) => e.boss && e.alive).length,
     pooled: enemyPool.length,
   }),
@@ -1709,6 +2425,44 @@ async function init() {
 if (new URLSearchParams(location.search).has("qa"))
   Object.assign((window as any).__hollowmere, {
     levelUp,
+    grantTalentXP: (amount: number, hero = selected.id) => {
+      save.heroes[hero].xp += amount;
+      persist();
+      if (screen === "talents") talents();
+    },
+    setLoadout: (
+      spells: Partial<Record<Weapon, number>>,
+      ps: Partial<Record<Passive, number>> = {},
+    ) => {
+      weapons = emptyWeapons();
+      passives = emptyPassives();
+      evolved = new Set<Weapon>();
+      for (const [k, v] of Object.entries(spells).slice(0, 6))
+        if (k in weaponInfo)
+          weapons[k as Weapon] = Math.min(6, Math.max(0, Number(v)));
+      for (const [k, v] of Object.entries(ps).slice(0, 6))
+        if (k in PASSIVES)
+          passives[k as Passive] = Math.min(5, Math.max(0, Number(v)));
+      recalculateStats();
+      checkEvolutions();
+      if (screen === "run") hud();
+    },
+    draftPool: () => draftPool().map((c) => ({ id: c.id, kind: c.kind })),
+    recipes: EVOLUTIONS,
+    catalog: () => ({
+      spells: weaponInfo,
+      passives: PASSIVES,
+      trees: talentTrees(selected.id),
+    }),
+    forceDraft: (ids: string[]) => {
+      levelUp();
+      const pool = draftPool();
+      choices = ids
+        .map((id) => pool.find((c) => c.id === id))
+        .filter((c): c is Upgrade => !!c)
+        .slice(0, 3);
+      showDraft();
+    },
     grantGold: (amount: number) => {
       save.gold += amount;
       persist();
@@ -1724,13 +2478,13 @@ if (new URLSearchParams(location.search).has("qa"))
       grid.build(enemies);
     },
     loadout: () => {
-      for (const k of weaponKeys) weapons[k] = 3;
+      for (const k of weaponKeys.slice(0, 6)) weapons[k] = 3;
       run.damage = 2;
       run.magnet = 200;
       hud();
     },
     benchmark: () => {
-      run.need = 1000000;
+      qaFreezeProgression = true;
       player.invuln = 1000;
     },
     heal: () => {
