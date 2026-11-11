@@ -1,5 +1,12 @@
+import {
+  EXPEDITIONS,
+  JEWEL_BY_ID,
+  migrateGear,
+  maxHeroic,
+  type HeroGear,
+} from "./gearing";
 /** Original Hollowmere progression catalog and pure save/talent rules. */
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
 export const HERO_IDS = ["c112", "c028", "c030", "c044", "c080", "c001"];
 export type Weapon =
   | "blade"
@@ -910,7 +917,10 @@ export function talentTrees(hero: string): TalentTree[] {
 export type HeroProgress = { xp: number; spent: Record<string, number> };
 export type AutoPreference = "balanced" | "offense" | "defense";
 export type Save = {
-  version: 2;
+  version: 3;
+  gear: Record<string, HeroGear>;
+  codex: string[];
+  expedition: { zone: string; heroic: number };
   settings: { autoUpgrade: boolean; autoPreference: AutoPreference };
   gold: number;
   unlocked: string[];
@@ -1000,7 +1010,28 @@ export function migrateSave(raw: any): Save {
     : ["c112"];
   if (!unlocked.includes("c112")) unlocked.unshift("c112");
   const result: Save = {
-    version: 2,
+    version: 3,
+    gear: Object.fromEntries(
+      HERO_IDS.map((hero) => [hero, migrateGear(data.gear?.[hero], hero)]),
+    ),
+    codex: [
+      ...new Set<string>(
+        Array.isArray(data.codex)
+          ? data.codex.filter(
+              (id: unknown) => typeof id === "string" && JEWEL_BY_ID[id],
+            )
+          : [],
+      ),
+    ],
+    expedition: {
+      zone: EXPEDITIONS.some((z) => z.id === data.expedition?.zone)
+        ? data.expedition.zone
+        : EXPEDITIONS[0].id,
+      heroic: Math.max(
+        0,
+        Math.min(5, Math.floor(Number(data.expedition?.heroic) || 0)),
+      ),
+    },
     settings: {
       autoUpgrade: data.settings?.autoUpgrade === true,
       autoPreference: ["balanced", "offense", "defense"].includes(
@@ -1032,10 +1063,14 @@ export function migrateSave(raw: any): Save {
       }
     result.heroes[hero] = p;
   }
+  result.expedition.heroic = Math.min(
+    result.expedition.heroic,
+    maxHeroic(result.gear[result.selected], result.expedition.zone),
+  );
   return result;
 }
 export function loadSave(storage: Pick<Storage, "getItem">): Save {
-  for (const key of ["hollowmere-v2", "hollowmere-v1"]) {
+  for (const key of ["hollowmere-v3", "hollowmere-v2", "hollowmere-v1"]) {
     try {
       const s = storage.getItem(key);
       if (s) return migrateSave(JSON.parse(s));

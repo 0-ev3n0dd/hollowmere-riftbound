@@ -1,4 +1,4 @@
-# Hollowmere — Riftbound · 0.2.0
+# Hollowmere — Riftbound · 0.3.0
 
 A single-player, local-first survivor action RPG. Vite, strict TypeScript, and HTML5 Canvas. No backend, accounts, external fonts, analytics, purchases, or cloud saves.
 
@@ -14,7 +14,7 @@ Local preview: http://localhost:4174/hollowmere-riftbound/
 
 ## Play
 
-WASD / arrows move; the touch joystick appears on touch devices. All weapons attack automatically. Gather XP gems, then click/tap a draft card or press **1 / 2 / 3**. **Escape** pauses. Retreat from the pause menu to bank rewards; death also banks them. Bosses arrive every three minutes. Runs are endless, and active runs do not resume after a refresh.
+WASD / arrows move; the touch joystick appears on touch devices. All weapons attack automatically. Gather XP gems, then click/tap a draft card or press **1 / 2 / 3**. **Escape** pauses. Retreat from the pause menu to bank rewards; death also banks them. Zone guardians arrive at 1:00, 2:00, and 3:00. Each expedition ends when its three named guardians are defeated; active runs do not resume after a refresh.
 
 ## Background play and automatic upgrades
 
@@ -24,6 +24,18 @@ WASD / arrows move; the touch joystick appears on touch devices. All weapons att
 - Auto picks only from the same three dealt cards: **complete an evolution → upgrade owned recipe components → fill empty slots → rarity**. Preference breaks ties within a tier. Balanced fills the smaller loadout category; Offense favors spells/damage passives; Defense favors survival passives. Evolutions already transform immediately once eligible. Auto never spends reroll, skip, or banish charges; rarity benefits still apply.
 - Every queued level gets a pick, including First Light bonus drafts. Large XP bursts drain in batches of at most 64 picks to avoid recursion/stack overflow. A small toast names the latest pick (and the number of additional batch picks), surviving HUD refreshes.
 - Runs keep fighting, collecting XP, and taking damage while in the background. Enable auto-upgrade if you want level-ups not to wait for a manual choice.
+
+## Equipment and expeditions · 0.3
+
+- **Five palette-shifted isometric expeditions**, with distinct combinations of the existing enemy/boss sprites, harder vitality/speed/damage/spawn scaling, and **15 original named guardians** in total. Each expedition has three timed bosses. All Normal zones are open; a Normal clear unlocks Heroic I for that hero/zone, then sequential clears unlock II–V.
+- **320 permanent hero-bound pieces**, across all six heroes and five rarities, with **30 named eight-piece sets**. Nine armor slots: Head, Shoulder, Chest, Waist, Legs, Feet, Wrist, Hands, Back. Four heroes use Main Hand + Off Hand; the Seer and Caller use a Ranged focus instead. Collection does not grant stats until equipped; gear applies on the next run.
+- **Independent assigned boss drops:** Common 60%, Uncommon 50%, Rare 40%, Epic 30%, Legendary 20% per assigned piece, per kill. A boss can drop several pieces or none; duplicate successful rolls do nothing. New drops persist immediately, appear in a non-blocking reveal, and are listed in the run summary.
+- **Thirteen gear stat types:** damage, cooldown reduction, vitality, critical chance/damage, speed, damage reduction, regeneration, pickup, gold, area, extra targets, and double-strike chance. Common through Legendary items have one through five stat lines. Double-strike doubles the resolved hit. Combat caps: 65% equipment/jewelry cooldown reduction and damage reduction, 85% total crit, 60% double-strike, +6 gear/jewelry targets.
+- **Four/eight-piece bonuses** count equipped Head through Hands; Back/weapons are additional non-set pieces. Clearing Heroic N raises all that zone's gear, including future drops, to N stars. Each star adds 18% base item stats (extra-target lines remain integral). All eight core pieces worn at five stars empower set bonuses by 50% and add another target.
+- **Armory paper doll**, per-hero collection, equipment totals, rarity filters, stat/comparison hover tooltips and a tap/click inspector. Whole-loadout comparisons include gaining or losing set bonuses. Drop Tables show each guardian, assigned pieces, arrivals, collection state and independent odds.
+- **16 temporary jewelry designs:** six rings, four trinkets, six Legendary amulets, each with three ranks. Wear two rings, two trinkets, one amulet. Duplicate worn finds upgrade; a new item in a full category replaces its lowest-rank item, explicitly shown before selection. Each amulet remakes one of the six signature spells using its advanced behavior. Remakes do not stack extra layers with an existing capstone/evolution.
+- Field reliquaries appear at 0:45 and each minute afterward; elites have a 25% cache chance, and non-final guardians leave caches. Walk within 55 units to choose one of three relics. **Auto-upgrade also chooses jewelry** when enabled, so background runs do not stall on new chest prompts. A permanent **Codex** remembers all witnessed offers, but jewelry itself resets every run.
+- Verification is deliberately lean: `npm run build`, then `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/google-chrome npm run verify:gear` against the production preview. One focused browser smoke covers migration, actual boss-death drops, equipment stats/sets, jewelry upgrade/remake/replacement, Heroic unlocking/stars, duplicate handling, persistence, zone selection, and console errors. It writes `/workspace/iso-gear-smoke.json` and the three requested Armory, Drop Tables and Zones screenshots.
 
 ## Progression expansion
 
@@ -53,7 +65,7 @@ Additional spells include Cinder Fan, Rime Needles, Briar Crown, Falling Star, D
 
 ## Saves and safe migration
 
-The expanded save uses **`hollowmere-v2`**. On first use, it reads a valid v2 save or migrates **`hollowmere-v1`**. The original v1 key is never overwritten or deleted. Gold, unlocked/selected heroes, original meta upgrades, best time, and completed-run count carry forward. New talent profiles and upgrade ranks receive safe defaults. Invalid numeric values, rank caps, choose-one conflicts, row gates, and point budgets are sanitized. Malformed v2 JSON falls back to a valid v1 save.
+The expanded save uses **`hollowmere-v3`**. It reads valid v3 data, then falls back to **`hollowmere-v2`** or **`hollowmere-v1`**. Old keys are never overwritten or deleted. Gold, unlocked/selected heroes, original meta upgrades, best time, and completed-run count carry forward. New talent profiles and upgrade ranks receive safe defaults. Invalid numeric values, rank caps, choose-one conflicts, row gates, and point budgets are sanitized. Malformed newer JSON falls back to a valid older save. Equipment IDs, hero ownership, slot compatibility, stars, clear tiers, and Codex entries are sanitized.
 
 Saves belong to the browser and origin; local-preview progress does not automatically move to GitHub Pages or another device.
 
@@ -83,4 +95,4 @@ Browser suites use Playwright's installed Chromium by default; set `PLAYWRIGHT_C
 
 Vite's base path is `/hollowmere-riftbound/`. The Actions workflow builds and deploys pushes to `main` using GitHub Pages. Feature branches do not deploy automatically.
 
-This is still a prototype: one biome, front-facing procedurally moved art rather than eight-direction animation, no audio, quests, equipment, cloud sync, or active-run resume. Talent point costs, draft odds, weapon balance, and unlock prices are initial values. Each hero has original tree/node names and a signature weapon; offense/defense/utility foundations are intentionally shared across heroes, not eighteen wholly independent spell simulators.
+This is still a prototype: palette-shifted rather than newly drawn biomes, front-facing procedurally moved art rather than eight-direction animation, no audio, quests, cloud sync, or active-run resume. Talent point costs, draft odds, weapon balance, and unlock prices are initial values. Each hero has original tree/node names and a signature weapon; offense/defense/utility foundations are intentionally shared across heroes, not eighteen wholly independent spell simulators.

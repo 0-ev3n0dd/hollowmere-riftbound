@@ -1,3 +1,34 @@
+import {
+  EXPEDITIONS,
+  GEAR,
+  GEAR_BY_ID,
+  JEWELRY,
+  JEWEL_BY_ID,
+  RARITIES,
+  SLOT_LABELS,
+  SLOT_GLYPHS,
+  getExpedition,
+  gearTotals,
+  addStats,
+  maxHeroic,
+  equipGear,
+  rollBossGear,
+  itemStats,
+  statText,
+  jewelryStats,
+  jewelryReplacement,
+  wearJewelry,
+  type GearSlot,
+  type Jewel,
+  type Expedition,
+} from "./gearing";
+import {
+  armoryMarkup,
+  zonesMarkup,
+  dropTablesMarkup,
+  codexMarkup,
+  jewelryOfferMarkup,
+} from "./gear-ui";
 import "./style.css";
 import { SimulationClock } from "./simulation-clock";
 import { pickAutoUpgrade } from "./auto-upgrade";
@@ -44,6 +75,11 @@ type Screen =
   | "title"
   | "shop"
   | "talents"
+  | "armory"
+  | "expeditions"
+  | "droptables"
+  | "codex"
+  | "jewelry"
   | "run"
   | "levelup"
   | "paused"
@@ -87,7 +123,7 @@ try {
 }
 function persist() {
   try {
-    localStorage.setItem("hollowmere-v2", JSON.stringify(save));
+    localStorage.setItem("hollowmere-v3", JSON.stringify(save));
   } catch {
     notify("Storage is unavailable. This session will still work.");
   }
@@ -97,14 +133,52 @@ function money() {
   return `<div class="coins"><span class="coin">◇</span> ${Math.floor(save.gold).toLocaleString()} <span class="subtle">gold</span></div>`;
 }
 function topbar(active: string) {
-  return `<header class="topbar"><div class="brand"><span class="brandmark">◈</span><div><strong>HOLLOWMERE</strong><small>R I F T B O U N D</small></div></div><nav class="nav"><button data-action="title" class="${active === "title" ? "active" : ""}">Expedition</button><button data-action="shop" class="${active === "shop" ? "active" : ""}">Sanctum</button><button data-action="talents" class="${active === "talents" ? "active" : ""}">Talents</button>${money()}</nav></header>`;
+  const tabs = [
+    ["title", "Wanderers"],
+    ["expeditions", "Expeditions"],
+    ["armory", "Armory"],
+    ["shop", "Sanctum"],
+    ["talents", "Talents"],
+    ["droptables", "Drop Tables"],
+    ["codex", "Codex"],
+  ];
+  return `<header class="topbar"><div class="brand"><span class="brandmark">◈</span><div><strong>HOLLOWMERE</strong><small>R I F T B O U N D</small></div></div><nav class="nav">${tabs.map(([id, label]) => `<button data-action="${id}" class="${active === id ? "active" : ""}">${label}</button>`).join("")}${money()}</nav></header>`;
+}
+let gearFilter = "all",
+  inspectedGear = "",
+  dropZone = save.expedition.zone;
+const heroGear = () => save.gear[selected.id];
+function armory() {
+  document.querySelector(".loot-reveal")?.remove();
+  screen = "armory";
+  document.body.classList.remove("playing");
+  $.innerHTML = `<section class="screen gear-screen">${topbar("armory")}${armoryMarkup(selected, heroes, heroGear(), gearFilter, inspectedGear)}</section>`;
+}
+function expeditions() {
+  screen = "expeditions";
+  document.body.classList.remove("playing");
+  save.expedition.heroic = Math.min(
+    save.expedition.heroic,
+    maxHeroic(heroGear(), save.expedition.zone),
+  );
+  $.innerHTML = `<section class="screen gear-screen">${topbar("expeditions")}${zonesMarkup(selected, heroGear(), save.expedition.zone, save.expedition.heroic, eliteArt)}</section>`;
+}
+function dropTables() {
+  screen = "droptables";
+  document.body.classList.remove("playing");
+  $.innerHTML = `<section class="screen gear-screen">${topbar("droptables")}${dropTablesMarkup(selected, heroGear(), dropZone, eliteArt)}</section>`;
+}
+function codex() {
+  screen = "codex";
+  document.body.classList.remove("playing");
+  $.innerHTML = `<section class="screen gear-screen">${topbar("codex")}${codexMarkup(save.codex)}</section>`;
 }
 function title() {
   screen = "title";
   document.body.classList.remove("playing");
   const owned = save.unlocked.includes(selected.id),
     wi = weaponInfo[selected.weapon as Weapon];
-  $.innerHTML = `<section class="screen">${topbar("title")}<div class="intro"><div class="intro-copy"><div class="eyebrow">An endless little adventure</div><h1>One soul.<br><em>Endless night.</em></h1><p>The rift is open. Stand against the wilds, gather forgotten power, and return stronger with every fall.</p><button class="primary" data-action="${owned ? "start" : "unlock"}">${owned ? "Enter the Hollow" : "Unlock " + selected.name}<span>↗</span></button><div class="minor">${owned ? "WASD to move · Weapons strike automatically" : `◇ ${heroPrices[heroes.indexOf(selected)]} gold · A new path awaits`}</div></div><div class="hero-stage"><div class="halo"></div><div class="pedestal"></div><img class="stage-sprite" src="${selected.src}" alt="${selected.name}, ${selected.title}"><div class="hero-label"><small>YOUR CHOSEN SOUL</small><strong>${selected.name}</strong><small>${selected.title.toUpperCase()}</small><small>${wi.glyph} ${wi.name}</small></div><span class="hero-number">0${heroes.indexOf(selected) + 1}</span></div></div><div class="roster-header"><span class="sectionlabel">CHOOSE YOUR WANDERER</span><span class="subtle">${save.unlocked.length} / ${heroes.length} unlocked · Every soul plays differently</span></div><div class="roster">${heroes.map((a, i) => `<button class="hero-card ${a.id === selected.id ? "selected" : ""} ${save.unlocked.includes(a.id) ? "" : "locked"}" data-hero="${a.id}" aria-label="Select ${a.name}"><img src="${a.src}" alt=""><div class="cardtext"><b>${a.name}</b><small>${a.title}</small></div><span class="badge">${save.unlocked.includes(a.id) ? (a.id === selected.id ? "● Selected" : "Available") : "◇ " + heroPrices[i]}</span></button>`).join("")}</div><footer class="footnote"><span>PROGRESSION ${VERSION} · SINGLE PLAYER · SAVED ON THIS DEVICE</span><span>Best ${formatTime(save.best)} · ${save.runs} expeditions</span></footer></section>`;
+  $.innerHTML = `<section class="screen">${topbar("title")}<div class="intro"><div class="intro-copy"><div class="eyebrow">Five horizons. One lasting legacy</div><h1>One soul.<br><em>Endless night.</em></h1><p>The rift is open. Stand against the wilds, gather forgotten power, and return stronger with every fall.</p><button class="primary" data-action="${owned ? "start" : "unlock"}">${owned ? "Enter the Hollow" : "Unlock " + selected.name}<span>↗</span></button><div class="minor">${owned ? "WASD to move · Choose another route in Expeditions" : `◇ ${heroPrices[heroes.indexOf(selected)]} gold · A new path awaits`}</div></div><div class="hero-stage"><div class="halo"></div><div class="pedestal"></div><img class="stage-sprite" src="${selected.src}" alt="${selected.name}, ${selected.title}"><div class="hero-label"><small>YOUR CHOSEN SOUL</small><strong>${selected.name}</strong><small>${selected.title.toUpperCase()}</small><small>${wi.glyph} ${wi.name}</small></div><span class="hero-number">0${heroes.indexOf(selected) + 1}</span></div></div><div class="roster-header"><span class="sectionlabel">CHOOSE YOUR WANDERER</span><span class="subtle">${save.unlocked.length} / ${heroes.length} unlocked · Every soul plays differently</span></div><div class="roster">${heroes.map((a, i) => `<button class="hero-card ${a.id === selected.id ? "selected" : ""} ${save.unlocked.includes(a.id) ? "" : "locked"}" data-hero="${a.id}" aria-label="Select ${a.name}"><img src="${a.src}" alt=""><div class="cardtext"><b>${a.name}</b><small>${a.title}</small></div><span class="badge">${save.unlocked.includes(a.id) ? (a.id === selected.id ? "● Selected" : "Available") : "◇ " + heroPrices[i]}</span></button>`).join("")}</div><footer class="footnote"><span>PROGRESSION ${VERSION} · SINGLE PLAYER · SAVED ON THIS DEVICE</span><span>Best ${formatTime(save.best)} · ${save.runs} expeditions</span></footer></section>`;
 }
 let shopFilter = "All",
   talentHeroId = "c112",
@@ -112,7 +186,7 @@ let shopFilter = "All",
 function shop() {
   screen = "shop";
   document.body.classList.remove("playing");
-  $.innerHTML = `<section class="screen sanctum-screen">${topbar("shop")}<div class="shop-title"><div class="eyebrow">18 lasting blessings · One stronger tomorrow</div><h1>The quiet between storms.</h1><p>Gold strengthens every wanderer. Talent mastery belongs to each soul.</p></div><div class="talent-callout"><span>◈</span><div><b>Grow beyond gold.</b><small>18 hero-specific trees · 51 earned points per hero · Free respecs</small></div><button class="secondary" data-action="talents">Explore talents ↗</button></div><div class="shop-filters">${["All", "Power", "Endurance", "Fortune", "Drafting"].map((k) => `<button data-filter="${k}" class="${shopFilter === k ? "active" : ""}">${k}</button>`).join("")}</div><div class="shop-grid">${metaInfo
+  $.innerHTML = `<section class="screen sanctum-screen">${topbar("shop")}<div class="shop-title"><div class="eyebrow">18 lasting blessings · One stronger tomorrow</div><h1>The quiet between storms.</h1><p>Gold strengthens every wanderer. Talents and equipment belong to each soul.</p></div><div class="talent-callout"><span>◈</span><div><b>Grow beyond gold.</b><small>18 hero-specific trees · 51 earned points per hero · Free respecs</small></div><button class="secondary" data-action="talents">Explore talents ↗</button></div><div class="shop-filters">${["All", "Power", "Endurance", "Fortune", "Drafting"].map((k) => `<button data-filter="${k}" class="${shopFilter === k ? "active" : ""}">${k}</button>`).join("")}</div><div class="shop-grid">${metaInfo
     .filter((m) => shopFilter === "All" || m.group === shopFilter)
     .map((m) => {
       const rank = save.meta[m.id],
@@ -252,6 +326,8 @@ type Enemy = {
   boss: boolean;
   elite: boolean;
   hitCd: number;
+  bossKey?: string;
+  bossName?: string;
   slow: number;
 };
 type Bullet = {
@@ -344,6 +420,19 @@ function makeRun() {
     talentXP: 0,
     autoPicks: 0,
     lastAutoPick: "",
+    zoneId: "briar",
+    heroic: 0,
+    cleared: false,
+    bossIndex: 0,
+    defeatedBosses: [] as string[],
+    loot: [] as string[],
+    duplicates: 0,
+    jewelry: {} as Record<string, number>,
+    nextCache: 45,
+    critDamage: 2,
+    reduction: 0,
+    doubleStrike: 0,
+    remade: null as Weapon | null,
   };
 }
 let qaFreezeProgression = false;
@@ -359,6 +448,7 @@ let run = makeRun(),
   pendingDrafts = 0;
 function recalculateStats(fullHeal = false) {
   const old = player.max,
+    previousHp = player.hp,
     b = talentBonus;
   player.max = 120 + save.meta.hp * 15 + passives.vitality * 20 + (b.hp || 0);
   player.hp = fullHeal
@@ -392,12 +482,39 @@ function recalculateStats(fullHeal = false) {
   run.duration = 1 + save.meta.duration * 0.1 + passives.duration * 0.18;
   run.amount = Math.ceil(passives.amount / 2);
   run.healKill = passives.leech * 0.2;
+  const g = addStats(
+    gearTotals(selected.id, heroGear()),
+    jewelryStats(run.jewelry),
+  );
+  run.remade =
+    Object.keys(run.jewelry)
+      .map((id) => JEWEL_BY_ID[id]?.remake)
+      .find((k): k is Weapon => !!k) || null;
+  const extraHp = Math.round(g.hp || 0);
+  player.max += extraHp;
+  // The base calculation above used the previous complete maximum. Correct health
+  // from that final value so repeated recalculation never heals or loses gear HP.
+  player.hp = fullHeal
+    ? player.max
+    : Math.min(player.max, previousHp + Math.max(0, player.max - old));
+  player.speed *= 1 + Math.min(0.9, g.speed || 0);
+  run.damage *= 1 + (g.damage || 0);
+  run.cooldown /= 1 - Math.min(0.65, g.haste || 0);
+  run.area *= 1 + (g.area || 0);
+  run.magnet *= 1 + (g.pickup || 0);
+  run.regen += g.regen || 0;
+  run.crit = Math.min(0.85, run.crit + (g.crit || 0));
+  run.critDamage = 2 + (g.critDamage || 0);
+  run.reduction = Math.min(0.65, g.reduction || 0);
+  run.doubleStrike = Math.min(0.6, g.doubleStrike || 0);
+  run.goldGain *= 1 + (g.gold || 0);
+  run.amount += Math.min(6, Math.floor(g.targets || 0));
 }
 function signature(k: Weapon) {
   return k === selected.weapon;
 }
 function twin(k: Weapon) {
-  return signature(k) && !!talentBonus.t0_capstone_30;
+  return (signature(k) && !!talentBonus.t0_capstone_30) || run.remade === k;
 }
 function spellHit(e: Enemy, n: number, k: Weapon, kx = 0, ky = 0) {
   if (!e.alive) return;
@@ -406,7 +523,7 @@ function spellHit(e: Enemy, n: number, k: Weapon, kx = 0, ky = 0) {
   if (
     (sig && talentBonus.t1_milestone_10) ||
     k === "frost" ||
-    (k === "axe" && evolved.has("axe"))
+    (k === "axe" && (evolved.has("axe") || twin("axe")))
   )
     e.slow = 1.5;
   if (sig && talentBonus.t1_milestone_20 && run.time >= run.healCd) {
@@ -470,6 +587,13 @@ function startRun(): void {
     invuln: 2,
   };
   run = makeRun();
+  run.zoneId = save.expedition.zone;
+  run.heroic = Math.min(
+    save.expedition.heroic,
+    maxHeroic(heroGear(), run.zoneId),
+  );
+  reliquaries.length = 0;
+  jewelryChoices = [];
   qaFreezeProgression = false;
   run.level = 1 + save.meta.start;
   run.need = Math.floor(8 + run.level * 3.4);
@@ -491,11 +615,16 @@ function startRun(): void {
   zones.length = 0;
   lightningPaths.length = 0;
   spawnTimer = 0;
-  nextBoss = 180;
+  nextBoss = getExpedition(run.zoneId).bosses[0].at;
   cam = { x: 0, y: 0 };
   for (let i = 0; i < 25; i++) spawnEnemy(false, rand(220, 600));
   hud();
-  banner("The Hollow stirs", "EXPEDITION BEGINS");
+  banner(
+    getExpedition(run.zoneId).name,
+    run.heroic
+      ? `HEROIC ${run.heroic} · EXPEDITION BEGINS`
+      : "EXPEDITION BEGINS",
+  );
   if (pendingDrafts > 0) levelUp();
 }
 function banner(text: string, sub = "THE RIFT GROWS RESTLESS") {
@@ -511,7 +640,16 @@ function hud() {
   if (document.activeElement?.matches("[data-auto-preference]")) return;
   const spells = weaponKeys.filter((k) => weapons[k]),
     ps = PASSIVE_KEYS.filter((k) => passives[k]);
-  $.innerHTML = `<section class="hud"><div class="xp-bar"><div class="xp-fill" style="width:${Math.min(100, (run.xp / run.need) * 100)}%"></div></div><div class="hud-top"><div class="player-panel"><div class="player-name">${selected.name}<small>LEVEL ${run.level}</small></div><div class="hp-track"><div class="hp-fill" style="width:${(player.hp / player.max) * 100}%"></div></div><div class="hp-text"><span>${Math.ceil(player.hp)} / ${player.max} vitality</span><span>${Math.floor(run.xp)} / ${run.need} XP</span></div></div><div class="time-panel"><b>${formatTime(run.time)}</b><small>WAVE ${Math.floor(run.time / 30) + 1} · RIFT LORD IN ${formatTime(nextBoss - run.time)}</small></div><div class="run-resources"><span class="coin">◇</span><b>${Math.floor(run.gold)}</b><span class="sep">/</span><span>⚔ ${run.kills}</span><button class="pause" data-action="pause" aria-label="Pause">Ⅱ</button></div></div><div class="auto-hud">${autoControls()}</div><div class="hud-bottom"><div class="loadout"><div class="loadout-label">SPELLS ${spells.length}/6</div><div class="weaponbar">${Array.from(
+  $.innerHTML = `<section class="hud"><div class="xp-bar"><div class="xp-fill" style="width:${Math.min(100, (run.xp / run.need) * 100)}%"></div></div><div class="hud-top"><div class="player-panel"><div class="player-name">${selected.name}<small>LEVEL ${run.level}</small></div><div class="hp-track"><div class="hp-fill" style="width:${(player.hp / player.max) * 100}%"></div></div><div class="hp-text"><span>${Math.ceil(player.hp)} / ${player.max} vitality</span><span>${Math.floor(run.xp)} / ${run.need} XP</span></div></div><div class="time-panel"><b>${formatTime(run.time)}</b><small>${getExpedition(run.zoneId).name} · ${run.heroic ? "H" + run.heroic : "NORMAL"}<br>${Number.isFinite(nextBoss) ? "GUARDIAN IN " + formatTime(nextBoss - run.time) : "FINAL GUARDIANS ACTIVE"}</small></div><div class="run-resources"><span class="coin">◇</span><b>${Math.floor(run.gold)}</b><span class="sep">/</span><span>⚔ ${run.kills}</span><button class="pause" data-action="pause" aria-label="Pause">Ⅱ</button></div></div><div class="auto-hud">${autoControls()}<div class="jewelry-bar"><small>RELICS</small>${Object.entries(
+    run.jewelry,
+  )
+    .map(
+      ([id, rank]) =>
+        `<span class="rarity-${JEWEL_BY_ID[id].rarity}" title="${JEWEL_BY_ID[id].name} · Rank ${rank}/3&#10;${JEWEL_BY_ID[id].desc}">${JEWEL_BY_ID[id].glyph}<b>${rank}</b></span>`,
+    )
+    .join(
+      "",
+    )}${Object.keys(run.jewelry).length ? "" : "<i>Open a reliquary to discover jewelry</i>"}</div></div><div class="hud-bottom"><div class="loadout"><div class="loadout-label">SPELLS ${spells.length}/6</div><div class="weaponbar">${Array.from(
     { length: 6 },
     (_, i) => {
       const k = spells[i];
@@ -533,18 +671,34 @@ function hud() {
     "",
   )}</div></div><div class="run-hint">V${VERSION} · WASD / ARROWS MOVE · ESC PAUSE</div></div>${bannerTimer > 0 ? `<div class="banner">${bannerText}</div>` : ""}</section>`;
 }
-function spawnEnemy(boss = false, radius?: number) {
+function spawnEnemy(
+  boss = false,
+  radius?: number,
+  guardian?: Expedition["bosses"][number],
+) {
   if (enemies.filter((e) => e.alive).length >= 480 && !boss) return;
   let a = rand(0, TAU),
     r = radius ?? Math.max(450, Math.min(W, H) * 0.65),
     elite = !boss && run.time > 40 && Math.random() < 0.1;
+  const expedition = getExpedition(run.zoneId);
+  const definition = guardian || expedition.bosses[Math.min(run.bossIndex, 2)];
   let artwork = boss
-    ? eliteArt[4 + (run.bosses % 4)]
+    ? eliteArt[definition.art]
     : elite
-      ? eliteArt[Math.floor(rand(0, 4))]
-      : enemiesArt[Math.floor(Math.random() * enemiesArt.length)];
+      ? eliteArt[
+          (EXPEDITIONS.indexOf(expedition) + Math.floor(Math.random() * 2)) %
+            eliteArt.length
+        ]
+      : enemiesArt[
+          expedition.enemies[
+            Math.floor(Math.random() * expedition.enemies.length)
+          ]
+        ];
   let max =
-    (boss ? 650 + run.bosses * 400 : elite ? 90 : 20) * (1 + run.time / 180);
+    (boss ? 650 + run.bosses * 400 : elite ? 90 : 20) *
+    (1 + run.time / 180) *
+    expedition.scale *
+    (1 + run.heroic * 0.35);
   let e = enemyPool.pop() || ({} as Enemy);
   Object.assign(e, {
     x: player.x + Math.cos(a) * r,
@@ -553,7 +707,9 @@ function spawnEnemy(boss = false, radius?: number) {
     vy: 0,
     hp: max,
     max,
-    speed: boss ? 37 : elite ? 46 : rand(27, 47) + Math.min(35, run.time / 18),
+    speed:
+      (boss ? 37 : elite ? 46 : rand(27, 47) + Math.min(35, run.time / 18)) *
+      (1 + EXPEDITIONS.indexOf(expedition) * 0.035 + run.heroic * 0.035),
     size: boss ? 160 : elite ? 87 : rand(54, 69),
     art: artwork,
     alive: true,
@@ -562,6 +718,8 @@ function spawnEnemy(boss = false, radius?: number) {
     phase: rand(0, TAU),
     face: 1,
     boss,
+    bossKey: boss ? definition.id : undefined,
+    bossName: boss ? definition.name : undefined,
     elite,
     hitCd: 0,
     slow: 0,
@@ -570,7 +728,8 @@ function spawnEnemy(boss = false, radius?: number) {
 }
 function damage(e: Enemy, n: number, kx = 0, ky = 0) {
   if (!e.alive) return;
-  if (Math.random() < run.crit) n *= 2;
+  if (Math.random() < run.crit) n *= run.critDamage;
+  if (Math.random() < run.doubleStrike) n *= 2;
   e.hp -= n;
   e.flash = 0.12;
   e.vx += kx;
@@ -595,11 +754,126 @@ function damage(e: Enemy, n: number, kx = 0, ky = 0) {
       fx(e.x, e.y - 20, "", i % 2 ? "#c8c4a6" : "#80906e", rand(2, 5));
     if (e.boss) {
       run.bosses++;
-      banner("A rift lord has fallen", "THE HOLLOW REMEMBERS");
+      awardGuardianLoot(e);
       player.hp = Math.min(player.max, player.hp + 30);
-    }
+      if (!run.cleared) dropReliquary(e.x, e.y, "Guardian reliquary");
+    } else if (e.elite && Math.random() < 0.25)
+      dropReliquary(e.x, e.y, "Elite cache");
   }
 }
+let qaLootRandom: (() => number) | undefined;
+let reliquaries: { x: number; y: number; source: string }[] = [];
+let jewelryChoices: Jewel[] = [];
+function awardGuardianLoot(enemy: Enemy) {
+  if (!enemy.bossKey || run.defeatedBosses.includes(enemy.bossKey)) return;
+  run.defeatedBosses.push(enemy.bossKey);
+  const loot = rollBossGear(
+    selected.id,
+    heroGear(),
+    enemy.bossKey,
+    qaLootRandom,
+  );
+  run.loot.push(...loot.found.map((i) => i.id));
+  run.duplicates += loot.duplicates;
+  if (
+    getExpedition(run.zoneId).bosses.every((b) =>
+      run.defeatedBosses.includes(b.id),
+    )
+  ) {
+    run.cleared = true;
+    heroGear().clears[run.zoneId] = Math.max(
+      heroGear().clears[run.zoneId],
+      run.heroic,
+    );
+    heroGear().stars[run.zoneId] = Math.max(
+      heroGear().stars[run.zoneId],
+      run.heroic,
+    );
+  }
+  persist();
+  banner(
+    enemy.bossName || "A guardian has fallen",
+    run.cleared ? "EXPEDITION CLEARED" : "THE HOLLOW REMEMBERS",
+  );
+  document.querySelector(".loot-reveal")?.remove();
+  const reveal = document.createElement("div");
+  reveal.className = "loot-reveal";
+  reveal.innerHTML = `<small>GUARDIAN SPOILS · SAVED TO ARMORY</small><h3>${enemy.bossName}</h3>${loot.found.length ? loot.found.map((i) => `<p class="rarity-${i.rarity}">${SLOT_GLYPHS[i.slot]} ${i.name}</p>`).join("") : "<p>No new pieces this time.</p>"}<small>${loot.duplicates ? `${loot.duplicates} duplicate rolls ignored · ` : ""}${Math.round(getExpedition(run.zoneId).chance * 100)}% independent chance per piece</small>`;
+  notices.append(reveal);
+  window.setTimeout(() => reveal.remove(), 6500);
+}
+function dropReliquary(x: number, y: number, source: string) {
+  if (reliquaries.length >= 6) reliquaries.shift();
+  reliquaries.push({ x, y, source });
+}
+function offerJewelry(source: string, forced?: string[]) {
+  if (screen !== "run") return;
+  const pool = JEWELRY.filter((j) => (run.jewelry[j.id] || 0) < j.max);
+  if (forced)
+    jewelryChoices = [...new Set(forced)]
+      .map((id) => pool.find((j) => j.id === id))
+      .filter((j): j is Jewel => !!j)
+      .slice(0, 3);
+  else {
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    const owned = shuffled.find((j) => run.jewelry[j.id]);
+    if (owned && Math.random() < 0.5)
+      (shuffled.splice(shuffled.indexOf(owned), 1), shuffled.unshift(owned));
+    jewelryChoices = shuffled.slice(0, 3);
+  }
+  if (!jewelryChoices.length) return;
+  for (const jewel of jewelryChoices)
+    if (!save.codex.includes(jewel.id)) save.codex.push(jewel.id);
+  persist();
+  if (save.settings.autoUpgrade) {
+    const score = (j: Jewel) =>
+      (j.remake && weapons[j.remake]
+        ? 300
+        : run.jewelry[j.id]
+          ? 200
+          : !jewelryReplacement(run.jewelry, j)
+            ? 100
+            : 0) +
+      RARITIES.indexOf(j.rarity) * 3 +
+      (save.settings.autoPreference === "defense" &&
+      (j.stats.hp || j.stats.regen || j.stats.reduction)
+        ? 5
+        : save.settings.autoPreference === "offense" &&
+            (j.stats.damage || j.stats.crit || j.stats.targets)
+          ? 5
+          : 0);
+    const chosen = [...jewelryChoices].sort((a, b) => score(b) - score(a))[0];
+    claimJewelry(chosen.id);
+    return;
+  }
+  screen = "jewelry";
+  document.body.classList.remove("playing");
+  $.insertAdjacentHTML(
+    "beforeend",
+    jewelryOfferMarkup(jewelryChoices, run.jewelry, source),
+  );
+}
+function resumeJewelry() {
+  jewelryChoices = [];
+  document.querySelector(".jewelry-shade")?.remove();
+  simulationClock.reset(performance.now());
+  screen = "run";
+  document.body.classList.add("playing");
+  hud();
+}
+function claimJewelry(id: string) {
+  if (!wearJewelry(run.jewelry, id)) return;
+  recalculateStats();
+  if (screen === "jewelry") resumeJewelry();
+  else {
+    jewelryChoices = [];
+    hud();
+  }
+  const message = `Relic: ${JEWEL_BY_ID[id].name} · Rank ${run.jewelry[id]}/3`;
+  if (document.hidden) pendingAutoNotice = message;
+  else notify(message);
+}
+
 function gem(x: number, y: number, value: number) {
   if (gems.length > 900) {
     let g = gems.find((g) => g.active);
@@ -1021,14 +1295,21 @@ function update(dt: number) {
   cam.y += (player.y - cam.y) * Math.min(1, dt * 8);
   spawnTimer -= dt;
   if (spawnTimer <= 0) {
-    spawnTimer = 1 / (5.5 + run.time / 30);
+    spawnTimer =
+      1 /
+      ((5.5 + run.time / 30) *
+        (1 +
+          EXPEDITIONS.indexOf(getExpedition(run.zoneId)) * 0.12 +
+          run.heroic * 0.08));
     spawnEnemy();
     if (run.time > 90) spawnEnemy();
   }
-  if (run.time >= nextBoss) {
-    spawnEnemy(true, 470);
-    nextBoss += 180;
-    banner("A rift lord approaches", "SEAL THE BREACH");
+  const expedition = getExpedition(run.zoneId);
+  if (run.time >= nextBoss && run.bossIndex < expedition.bosses.length) {
+    const boss = expedition.bosses[run.bossIndex++];
+    spawnEnemy(true, 470, boss);
+    nextBoss = expedition.bosses[run.bossIndex]?.at ?? Infinity;
+    banner(boss.name, "A GUARDIAN APPROACHES");
   }
   for (const e of enemies) {
     if (!e.alive) {
@@ -1068,7 +1349,13 @@ function update(dt: number) {
       e.y = player.y + Math.sin(a) * 500;
     }
     if (d < (e.boss ? 38 : 22) && player.invuln <= 0) {
-      const taken = Math.max(1, (e.boss ? 24 : e.elite ? 12 : 7) - run.armor);
+      const taken = Math.max(
+        1,
+        ((e.boss ? 24 : e.elite ? 12 : 7) *
+          (1 + EXPEDITIONS.indexOf(expedition) * 0.15 + run.heroic * 0.22) -
+          run.armor) *
+          (1 - run.reduction),
+      );
       player.hp -= taken;
       player.invuln = 0.72;
       player.flash = 0.2;
@@ -1122,7 +1409,7 @@ function update(dt: number) {
       b.type === "familiar" ||
       b.type === "raven" ||
       (signature(b.type) && !!talentBonus.t2_milestone_10) ||
-      (b.type === "bolt" && evolved.has("bolt"))
+      (b.type === "bolt" && (evolved.has("bolt") || twin("bolt")))
     ) {
       b.targetCd -= dt;
       if (b.targetCd <= 0 || !b.target?.alive || b.hit.has(b.target)) {
@@ -1217,6 +1504,26 @@ function update(dt: number) {
       effects[i] = effects[effects.length - 1];
       effects.pop();
     }
+  if (run.cleared) {
+    finishRun();
+    return;
+  }
+  if (run.time >= run.nextCache) {
+    run.nextCache += 60;
+    dropReliquary(
+      player.x + rand(-45, 45),
+      player.y + rand(-30, 30),
+      "Field reliquary",
+    );
+  }
+  const cache = reliquaries.find(
+    (c) => Math.hypot(c.x - player.x, c.y - player.y) < 55,
+  );
+  if (cache) {
+    reliquaries.splice(reliquaries.indexOf(cache), 1);
+    offerJewelry(cache.source);
+    if (screen !== "run") return;
+  }
   if (run.xp >= run.need) {
     run.xp -= run.need;
     run.level++;
@@ -1520,6 +1827,8 @@ function pause() {
   }
 }
 function finishRun() {
+  notices.querySelector(".toast")?.remove();
+  pendingAutoNotice = "";
   if (!run.earned) {
     run.gold += Math.floor(run.time / 8) * run.goldGain;
     save.gold += Math.floor(run.gold);
@@ -1533,7 +1842,20 @@ function finishRun() {
   talentHeroId = selected.id;
   screen = "dead";
   document.body.classList.remove("playing");
-  $.innerHTML = `<div class="modal-shade"><section class="modal" style="max-width:650px"><div class="eyebrow">The Hollow remembers</div><h2>Not the end. A beginning.</h2><p>${selected.name}'s watch is over. Your hard-earned power remains.</p><div class="statsgrid"><div class="stat"><b>${formatTime(run.time)}</b><small>SURVIVED</small></div><div class="stat"><b>${run.kills}</b><small>FOES SLAIN</small></div><div class="stat"><b>${run.level}</b><small>SOUL LEVEL</small></div><div class="stat"><b>◇ ${Math.floor(run.gold)}</b><small>GOLD EARNED</small></div></div><div class="death-buttons"><button class="primary" data-action="shop">Visit the Sanctum ↗</button><button class="secondary" data-action="talents">Spend talents</button><button class="secondary" data-action="title">Choose a wanderer</button></div><p class="close-hint">+${run.talentXP} ${selected.name} talent XP · ${earnedPoints(save.heroes[selected.id].xp) - totalSpent(save.heroes[selected.id])} unspent points · All gold saved</p></section></div>`;
+  $.innerHTML = `<div class="modal-shade"><section class="modal run-summary"><div class="eyebrow">${getExpedition(run.zoneId).name} · ${run.heroic ? "Heroic " + run.heroic : "Normal"}</div><h2>${run.cleared ? "The breach is sealed." : "Not the end. A beginning."}</h2><p>${run.cleared ? `All three guardians defeated. ${run.heroic ? `This zone's gear is now at least ${run.heroic} stars.` : "Heroic I is now unlocked."}` : `${selected.name}'s watch is over. Your hard-earned power remains.`}</p><div class="statsgrid"><div class="stat"><b>${formatTime(run.time)}</b><small>SURVIVED</small></div><div class="stat"><b>${run.kills}</b><small>FOES SLAIN</small></div><div class="stat"><b>${run.level}</b><small>SOUL LEVEL</small></div><div class="stat"><b>◇ ${Math.floor(run.gold)}</b><small>GOLD EARNED</small></div></div><section class="run-loot-summary"><h3>Kept in the Armory · ${run.loot.length} new pieces</h3>${
+    run.loot.length
+      ? `<div>${run.loot
+          .map((id) => {
+            const i = GEAR_BY_ID[id];
+            return `<p class="rarity-${i.rarity}">${SLOT_GLYPHS[i.slot]} ${i.name} <small>${heroGear().stars[i.zone]}★</small></p>`;
+          })
+          .join("")}</div>`
+      : "<p>No new gear this crossing. Each assigned piece rolls independently.</p>"
+  }<small>${run.duplicates} duplicate rolls ignored · ${run.defeatedBosses.length}/3 guardians defeated</small><p>Jewelry left behind: ${
+    Object.entries(run.jewelry)
+      .map(([id, rank]) => `${JEWEL_BY_ID[id].name} ${rank}`)
+      .join(" · ") || "None"
+  }. The Codex remembers.</p></section><div class="death-buttons"><button class="primary" data-action="armory">Open the Armory ↗</button><button class="secondary" data-action="expeditions">Choose expedition</button><button class="secondary" data-action="shop">Visit the Sanctum</button></div><p class="close-hint">+${run.talentXP} ${selected.name} talent XP · Gold and permanent gear saved · Jewelry resets next expedition</p></section></div>`;
 }
 
 const ground = document.createElement("canvas");
@@ -1567,6 +1889,18 @@ for (let row = -1; row < 34; row++)
     gctx.stroke();
   }
 const groundPattern = ctx.createPattern(ground, "repeat")!;
+const biomePatterns = new Map(
+  EXPEDITIONS.map((z) => {
+    const image = document.createElement("canvas");
+    image.width = ground.width;
+    image.height = ground.height;
+    const g = image.getContext("2d")!;
+    g.drawImage(ground, 0, 0);
+    g.fillStyle = z.tint;
+    g.fillRect(0, 0, image.width, image.height);
+    return [z.id, ctx.createPattern(image, "repeat")!];
+  }),
+);
 const whiteImages = new Map<string, HTMLCanvasElement>();
 const numbers = new Map<string, HTMLCanvasElement>();
 function numberSprite(text: string, color: string, size: number) {
@@ -1749,7 +2083,12 @@ function drawProp(x: number, y: number, seed: number) {
 function drawGround() {
   ctx.save();
   ctx.translate(W / 2 - cam.x, H * 0.53 - cam.y);
-  ctx.fillStyle = groundPattern;
+  ctx.fillStyle =
+    biomePatterns.get(
+      ["run", "levelup", "jewelry", "paused", "dead"].includes(screen)
+        ? run.zoneId
+        : save.expedition.zone,
+    ) || groundPattern;
   ctx.fillRect(cam.x - W / 2 - 130, cam.y - H * 0.53 - 100, W + 260, H + 200);
   const px0 = Math.floor((cam.x - W / 2) / 140) - 1,
     py0 = Math.floor((cam.y - H / 2) / 115) - 1;
@@ -2023,7 +2362,7 @@ const gemImage = gemBitmap("#c5d8b0"),
   richGemImage = gemBitmap("#e3c77c");
 function render() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (!["run", "levelup", "paused", "dead"].includes(screen)) {
+  if (!["run", "levelup", "jewelry", "paused", "dead"].includes(screen)) {
     cam.x = Math.sin(performance.now() * 0.00003) * 80;
     cam.y = -80;
     drawGround();
@@ -2031,6 +2370,23 @@ function render() {
   }
   drawGround();
   drawZones();
+  for (const cache of reliquaries) {
+    const [x, y] = screenXY(cache.x, cache.y);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = "#e3c36e";
+    ctx.strokeStyle = "#795a37";
+    ctx.lineWidth = 2;
+    ctx.fillRect(-11, -16, 22, 15);
+    ctx.strokeRect(-11, -16, 22, 15);
+    ctx.fillStyle = "#f7e5a5";
+    ctx.fillRect(-2, -14, 4, 9);
+    ctx.fillStyle = "#3d4a3a";
+    ctx.font = "9px Georgia";
+    ctx.textAlign = "center";
+    ctx.fillText("RELIQUARY", 0, -24);
+    ctx.restore();
+  }
   drawWeapons();
   for (const g of gems) {
     let [x, y] = screenXY(g.x, g.y);
@@ -2068,6 +2424,18 @@ function render() {
       );
     } else {
       const m = e as Enemy;
+      if (m.boss && m.alive) {
+        const [x, y] = screenXY(m.x, m.y);
+        ctx.save();
+        ctx.font = "bold 11px Georgia";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#faf0cf";
+        ctx.strokeStyle = "#293d39";
+        ctx.lineWidth = 3;
+        ctx.strokeText(m.bossName || "Guardian", x, y - m.size * 0.95);
+        ctx.fillText(m.bossName || "Guardian", x, y - m.size * 0.95);
+        ctx.restore();
+      }
       sprite(
         m.art,
         m.x,
@@ -2262,7 +2630,7 @@ function frame(now: number) {
   pumpSimulation();
   if (
     !document.hidden &&
-    (!["levelup", "paused", "dead"].includes(screen) ||
+    (!["levelup", "jewelry", "paused", "dead"].includes(screen) ||
       renderedScreen !== screen)
   ) {
     render();
@@ -2285,6 +2653,70 @@ resize();
 $.addEventListener("click", (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>("button");
   if (!el || el.hasAttribute("disabled")) return;
+  if (el.dataset.gearHero) {
+    selected = heroes.find((h) => h.id === el.dataset.gearHero)!;
+    save.selected = selected.id;
+    inspectedGear = "";
+    persist();
+    armory();
+    return;
+  }
+  if (el.dataset.gearFilter) {
+    gearFilter = el.dataset.gearFilter;
+    armory();
+    return;
+  }
+  if (el.dataset.inspectGear) {
+    inspectedGear = el.dataset.inspectGear;
+    armory();
+    return;
+  }
+  if (el.dataset.equipGear) {
+    if (equipGear(selected.id, heroGear(), el.dataset.equipGear)) {
+      persist();
+      armory();
+    }
+    return;
+  }
+  if (el.dataset.unequipGear) {
+    delete heroGear().equipped[el.dataset.unequipGear as GearSlot];
+    persist();
+    armory();
+    return;
+  }
+  if (el.dataset.expedition) {
+    save.expedition.zone = getExpedition(el.dataset.expedition).id;
+    save.expedition.heroic = 0;
+    persist();
+    expeditions();
+    return;
+  }
+  if (el.dataset.heroic !== undefined) {
+    const tier = Number(el.dataset.heroic);
+    if (
+      Number.isInteger(tier) &&
+      tier >= 0 &&
+      tier <= maxHeroic(heroGear(), save.expedition.zone)
+    ) {
+      save.expedition.heroic = tier;
+      persist();
+      expeditions();
+    }
+    return;
+  }
+  if (el.dataset.dropZone) {
+    dropZone = getExpedition(el.dataset.dropZone).id;
+    dropTables();
+    return;
+  }
+  if (el.dataset.jewelry) {
+    if (
+      screen === "jewelry" &&
+      jewelryChoices.some((j) => j.id === el.dataset.jewelry)
+    )
+      claimJewelry(el.dataset.jewelry);
+    return;
+  }
   if (el.dataset.filter) {
     shopFilter = el.dataset.filter;
     shop();
@@ -2348,6 +2780,22 @@ $.addEventListener("click", (e) => {
     return;
   }
   switch (el.dataset.action) {
+    case "armory":
+      armory();
+      break;
+    case "expeditions":
+      expeditions();
+      break;
+    case "droptables":
+      dropZone = save.expedition.zone;
+      dropTables();
+      break;
+    case "codex":
+      codex();
+      break;
+    case "leave-jewelry":
+      if (screen === "jewelry") resumeJewelry();
+      break;
     case "toggle-auto":
       save.settings.autoUpgrade = !save.settings.autoUpgrade;
       persist();
@@ -2573,6 +3021,13 @@ async function init() {
     talentBonus: { ...talentBonus },
     stats: {
       damage: run.damage,
+      maxHp: player.max,
+      crit: run.crit,
+      critDamage: run.critDamage,
+      reduction: run.reduction,
+      doubleStrike: run.doubleStrike,
+      goldGain: run.goldGain,
+      pickup: run.magnet,
       signatureDamage: run.signatureDamage,
       haste: run.cooldown,
       armor: run.armor,
@@ -2584,7 +3039,24 @@ async function init() {
     orbitCount: weapons.blade ? orbitPositions("blade").length : 0,
     talentXP: run.talentXP,
     zones: zones.length,
+    gear: structuredClone(save.gear[selected.id]),
+    gearTotals: gearTotals(selected.id, heroGear()),
+    expedition: { ...save.expedition },
+    activeExpedition: {
+      zone: run.zoneId,
+      heroic: run.heroic,
+      cleared: run.cleared,
+      defeatedBosses: [...run.defeatedBosses],
+    },
+    runLoot: [...run.loot],
+    jewelry: { ...run.jewelry },
+    codex: [...save.codex],
     counts: {
+      expeditions: EXPEDITIONS.length,
+      guardians: EXPEDITIONS.reduce((n, z) => n + z.bosses.length, 0),
+      gear: GEAR.length,
+      sets: 30,
+      jewelry: JEWELRY.length,
       spells: weaponKeys.length,
       passives: PASSIVE_KEYS.length,
       evolutions: Object.keys(EVOLUTIONS).length,
@@ -2599,6 +3071,27 @@ async function init() {
 if (new URLSearchParams(location.search).has("qa"))
   Object.assign((window as any).__hollowmere, {
     levelUp,
+    gearCatalog: () => ({
+      gear: GEAR,
+      jewelry: JEWELRY,
+      expeditions: EXPEDITIONS,
+    }),
+    offerJewelry: (ids: string[]) => offerJewelry("Field reliquary", ids),
+    defeatGuardian: (index = 0, guaranteed = true) => {
+      const z = getExpedition(run.zoneId),
+        boss = z.bosses[Math.max(0, Math.min(2, index))];
+      if (screen !== "run" || run.defeatedBosses.includes(boss.id)) return;
+      spawnEnemy(true, 200, boss);
+      const enemy = enemies[enemies.length - 1];
+      run.bossIndex = Math.max(run.bossIndex, index + 1);
+      nextBoss = z.bosses[run.bossIndex]?.at ?? Infinity;
+      qaLootRandom = guaranteed ? () => 0 : undefined;
+      try {
+        damage(enemy, 1e9);
+      } finally {
+        qaLootRandom = undefined;
+      }
+    },
     grantRunXP: (amount: number) => {
       run.xp += Math.max(
         0,

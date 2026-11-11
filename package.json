@@ -1,6 +1,6 @@
 {
   "name": "hollowmere-survivor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "test": "node scripts/test-progression-rules.mjs && node scripts/test-background-auto-rules.mjs",
     "verify": "node scripts/verify-progression.mjs",
     "verify:spells": "node scripts/verify-spell-combat.mjs",
-    "verify:background": "node scripts/verify-background-auto.mjs"
+    "verify:background": "node scripts/verify-background-auto.mjs",
+    "verify:gear": "node scripts/verify-gear-smoke.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",

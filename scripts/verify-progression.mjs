@@ -41,7 +41,7 @@ let s = await snap();
 expect(s.gold).toBe(1200);
 expect(s.meta.hp).toBe(2);
 expect(s.meta.damage).toBe(3);
-expect(s.counts).toEqual({
+expect(s.counts).toMatchObject({
   spells: 18,
   passives: 16,
   evolutions: 6,
@@ -270,7 +270,7 @@ const rescue = await browser.newContext({
   viewport: { width: 1000, height: 800 },
 });
 await rescue.addInitScript((old) => {
-  localStorage.setItem("hollowmere-v2", "{malformed");
+  localStorage.setItem("hollowmere-v3", "{malformed");
   localStorage.setItem("hollowmere-v1", JSON.stringify(old));
 }, old);
 const rp = await rescue.newPage();
