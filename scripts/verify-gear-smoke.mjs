@@ -45,7 +45,7 @@ try {
   await page.goto("http://localhost:4174/hollowmere-riftbound/?qa=1");
   await page.waitForSelector('[data-action="start"]');
   let state = await snap();
-  expect(state.version).toBe("0.3.0");
+  expect(state.version).toBe("0.4.0");
   expect(state.gold).toBe(932);
   expect(state.meta.hp).toBe(2);
   expect(state.heroProgress.c112.xp).toBe(512);
@@ -212,10 +212,10 @@ try {
   expect(persisted.jewelry).toEqual({});
   const stored = await page.evaluate(() => ({
     old: localStorage.getItem("hollowmere-v2"),
-    fresh: JSON.parse(localStorage.getItem("hollowmere-v3")),
+    fresh: JSON.parse(localStorage.getItem("hollowmere-v4")),
   }));
   expect(stored.old).toBe(JSON.stringify(old));
-  expect(stored.fresh.version).toBe(3);
+  expect(stored.fresh.version).toBe(4);
   expect(report.errors).toEqual([]);
   report.counts = persisted.counts;
   check(

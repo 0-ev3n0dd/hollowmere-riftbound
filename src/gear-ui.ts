@@ -104,7 +104,7 @@ export function dropTablesMarkup(
   portraits: Portrait[],
 ) {
   const z = EXPEDITIONS.find((z) => z.id === selected) || EXPEDITIONS[0];
-  return `<div class="gear-page-title"><div><div class="eyebrow">Know what the guardians keep</div><h1>The spoils of the Hollow.</h1><p>Assigned drops for ${hero.name}. Every listed piece rolls independently; duplicates add nothing.</p></div><div class="collection-count"><b>${Math.round(z.chance * 100)}<small>%</small></b><span>${z.rarity.toUpperCase()} · PER PIECE, PER KILL</span></div></div><div class="drop-tabs">${EXPEDITIONS.map((v) => `<button data-drop-zone="${v.id}" class="rarity-${v.rarity} ${z.id === v.id ? "active" : ""}">${v.name}</button>`).join("")}</div><div class="drop-bosses">${z.bosses
+  return `<div class="gear-page-title"><div><div class="eyebrow">Know what the guardians keep</div><h1>The spoils of the Hollow.</h1><p>Assigned drops for ${hero.name}. Every listed piece rolls independently; duplicates become spare copies for the Forge.</p></div><div class="collection-count"><b>${Math.round(z.chance * 100)}<small>%</small></b><span>${z.rarity.toUpperCase()} · PER PIECE, PER KILL</span></div></div><div class="drop-tabs">${EXPEDITIONS.map((v) => `<button data-drop-zone="${v.id}" class="rarity-${v.rarity} ${z.id === v.id ? "active" : ""}">${v.name}</button>`).join("")}</div><div class="drop-bosses">${z.bosses
     .map(
       (b) =>
         `<article class="drop-boss rarity-${z.rarity}"><div class="boss-portrait"><img src="${portraits[b.art]?.src}" alt="${b.name}"><span>${Math.floor(b.at / 60)}:00 ARRIVAL</span></div><h2>${b.name}</h2><p>${Math.round(z.chance * 100)}% independent chance for each assigned piece</p><div class="boss-pieces">${GEAR.filter(
@@ -127,11 +127,12 @@ export function jewelryOfferMarkup(
   choices: Jewel[],
   worn: Record<string, number>,
   source: string,
+  bonusRanks = 0,
 ) {
   return `<div class="modal-shade jewelry-shade"><section class="modal jewelry-modal"><div class="eyebrow">${source} · A fleeting treasure</div><h2>A keepsake for this crossing.</h2><p>Pick one. Finding the same worn relic again upgrades its rank.</p><div class="jewel-choices">${choices
     .map((j) => {
       const old = jewelryReplacement(worn, j);
-      return `<button class="jewel-choice rarity-${j.rarity}" data-jewelry="${j.id}"><small>${j.rarity.toUpperCase()} · ${j.kind.toUpperCase()}</small><span>${j.glyph}</span><h3>${j.name}</h3><p>${j.desc}</p><div class="item-stats">${stats(j.stats)}</div><b>${worn[j.id] ? `Upgrade ${worn[j.id]} → ${worn[j.id] + 1} / ${j.max}` : old ? `Replaces ${JEWEL_BY_ID[old].name}` : "Equip rank 1 / " + j.max}</b></button>`;
+      return `<button class="jewel-choice rarity-${j.rarity}" data-jewelry="${j.id}"><small>${j.rarity.toUpperCase()} · ${j.kind.toUpperCase()}</small><span>${j.glyph}</span><h3>${j.name}</h3><p>${j.desc}</p><div class="item-stats">${stats(j.stats)}</div><b>${worn[j.id] ? `Upgrade ${worn[j.id]} → ${worn[j.id] + 1} / ${j.max + bonusRanks}` : old ? `Replaces ${JEWEL_BY_ID[old].name}` : "Equip rank 1 / " + (j.max + bonusRanks)}</b></button>`;
     })
     .join(
       "",

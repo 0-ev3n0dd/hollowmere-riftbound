@@ -1,4 +1,16 @@
 import {
+  beginTownRun,
+  townAction,
+  townEffects,
+  settleTown,
+  ensureMarket,
+  SUPPLIES,
+  CONTRACTS,
+  COSMETICS,
+  type Pact,
+} from "./town";
+import { townMarkup, TOWN_PAGES, type TownChoice } from "./town-ui";
+import {
   EXPEDITIONS,
   GEAR,
   GEAR_BY_ID,
@@ -30,6 +42,7 @@ import {
   jewelryOfferMarkup,
 } from "./gear-ui";
 import "./style.css";
+import "./town.css";
 import { SimulationClock } from "./simulation-clock";
 import { pickAutoUpgrade } from "./auto-upgrade";
 import type { AutoPreference } from "./progression";
@@ -76,6 +89,7 @@ type Screen =
   | "shop"
   | "talents"
   | "armory"
+  | "town"
   | "expeditions"
   | "droptables"
   | "codex"
@@ -123,7 +137,7 @@ try {
 }
 function persist() {
   try {
-    localStorage.setItem("hollowmere-v3", JSON.stringify(save));
+    localStorage.setItem("hollowmere-v4", JSON.stringify(save));
   } catch {
     notify("Storage is unavailable. This session will still work.");
   }
@@ -137,6 +151,7 @@ function topbar(active: string) {
     ["title", "Wanderers"],
     ["expeditions", "Expeditions"],
     ["armory", "Armory"],
+    ["town", "Town"],
     ["shop", "Sanctum"],
     ["talents", "Talents"],
     ["droptables", "Drop Tables"],
@@ -172,6 +187,28 @@ function codex() {
   screen = "codex";
   document.body.classList.remove("playing");
   $.innerHTML = `<section class="screen gear-screen">${topbar("codex")}${codexMarkup(save.codex)}</section>`;
+}
+let townPage = "overview",
+  townChoice: TownChoice = {};
+function townScreen() {
+  screen = "town";
+  document.body.classList.remove("playing");
+  document.querySelector(".loot-reveal")?.remove();
+  settleTown(save);
+  ensureMarket(save, selected.id);
+  persist();
+  document.documentElement.style.setProperty(
+    "--hero-hue",
+    `${COSMETICS.find((c) => c.id === save.town.cosmetics.tint)?.hue || 0}deg`,
+  );
+  $.innerHTML = `<section class="screen gear-screen town-screen">${topbar("town")}${townMarkup(save, selected, heroes, townPage, townChoice)}</section>`;
+}
+function runSupply(key: string) {
+  return run.supplies.reduce(
+    (sum, id) =>
+      sum + Number((SUPPLIES.find((s) => s.id === id) as any)?.[key] || 0),
+    0,
+  );
 }
 function title() {
   screen = "title";
@@ -433,6 +470,18 @@ function makeRun() {
     reduction: 0,
     doubleStrike: 0,
     remade: null as Weapon | null,
+    supplies: [] as string[],
+    pact: null as Pact | null,
+    enemyHealth: 1,
+    enemyDamage: 1,
+    enemySpawns: 1,
+    contractGold: 1,
+    playerHpFactor: 1,
+    playerDamageFactor: 1,
+    bossDamage: 1,
+    hue: 0,
+    auraColor: "",
+    themeColor: "",
   };
 }
 let qaFreezeProgression = false;
@@ -482,24 +531,31 @@ function recalculateStats(fullHeal = false) {
   run.duration = 1 + save.meta.duration * 0.1 + passives.duration * 0.18;
   run.amount = Math.ceil(passives.amount / 2);
   run.healKill = passives.leech * 0.2;
+  const town = townEffects(save, selected.id);
   const g = addStats(
     gearTotals(selected.id, heroGear()),
-    jewelryStats(run.jewelry),
+    jewelryStats(run.jewelry, town.mastery),
+    town.stats,
+    { hp: runSupply("hp"), reduction: runSupply("reduction") },
   );
   run.remade =
     Object.keys(run.jewelry)
       .map((id) => JEWEL_BY_ID[id]?.remake)
       .find((k): k is Weapon => !!k) || null;
   const extraHp = Math.round(g.hp || 0);
-  player.max += extraHp;
+  player.max = Math.max(
+    1,
+    Math.round((player.max + extraHp) * run.playerHpFactor),
+  );
   // The base calculation above used the previous complete maximum. Correct health
   // from that final value so repeated recalculation never heals or loses gear HP.
   player.hp = fullHeal
     ? player.max
     : Math.min(player.max, previousHp + Math.max(0, player.max - old));
   player.speed *= 1 + Math.min(0.9, g.speed || 0);
-  run.damage *= 1 + (g.damage || 0);
-  run.cooldown /= 1 - Math.min(0.65, g.haste || 0);
+  run.damage *= (1 + (g.damage || 0)) * run.playerDamageFactor;
+  run.cooldown =
+    (run.cooldown / (1 - Math.min(0.65, g.haste || 0))) * (1 + town.haste);
   run.area *= 1 + (g.area || 0);
   run.magnet *= 1 + (g.pickup || 0);
   run.regen += g.regen || 0;
@@ -507,7 +563,15 @@ function recalculateStats(fullHeal = false) {
   run.critDamage = 2 + (g.critDamage || 0);
   run.reduction = Math.min(0.65, g.reduction || 0);
   run.doubleStrike = Math.min(0.6, g.doubleStrike || 0);
-  run.goldGain *= 1 + (g.gold || 0);
+  run.goldGain *=
+    (1 + (g.gold || 0)) *
+    getExpedition(run.zoneId).scale *
+    (1 + run.heroic * 0.45) *
+    (1 + town.gold + runSupply("gold")) *
+    run.contractGold;
+  run.xpGain *= 1 + town.xp + runSupply("xp");
+  run.luck += town.luck;
+  run.bossDamage = 1 + runSupply("bossDamage");
   run.amount += Math.min(6, Math.floor(g.targets || 0));
 }
 function signature(k: Weapon) {
@@ -588,6 +652,24 @@ function startRun(): void {
   };
   run = makeRun();
   run.zoneId = save.expedition.zone;
+  const provisions = beginTownRun(save, selected.id);
+  run.supplies = provisions.active.map((s) => s.id);
+  run.jewelry = provisions.jewelry;
+  run.pact = provisions.pact;
+  const contract = CONTRACTS.find((c) => c.id === run.pact?.id),
+    seal = run.pact?.tier || 0;
+  run.enemyHealth = 1 + (contract?.health || 0) * seal;
+  run.enemyDamage = 1 + (contract?.damage || 0) * seal;
+  run.enemySpawns = 1 + (contract?.spawns || 0) * seal;
+  run.contractGold = 1 + (contract?.gold || 0) * seal;
+  run.playerHpFactor = Math.max(0.5, 1 + (contract?.playerHp || 0) * seal);
+  run.playerDamageFactor = 1 + (contract?.playerDamage || 0) * seal;
+  run.hue = COSMETICS.find((c) => c.id === save.town.cosmetics.tint)?.hue || 0;
+  run.auraColor =
+    COSMETICS.find((c) => c.id === save.town.cosmetics.aura)?.color || "";
+  run.themeColor =
+    COSMETICS.find((c) => c.id === save.town.cosmetics.particles)?.color || "";
+  persist();
   run.heroic = Math.min(
     save.expedition.heroic,
     maxHeroic(heroGear(), run.zoneId),
@@ -595,7 +677,7 @@ function startRun(): void {
   reliquaries.length = 0;
   jewelryChoices = [];
   qaFreezeProgression = false;
-  run.level = 1 + save.meta.start;
+  run.level = 1 + Math.max(save.meta.start, runSupply("start"));
   run.need = Math.floor(8 + run.level * 3.4);
   weapons = emptyWeapons();
   weapons[selected.weapon as Weapon] = 1;
@@ -604,9 +686,9 @@ function startRun(): void {
   evolved = new Set();
   banished = new Set();
   banishMode = false;
-  pendingDrafts = save.meta.start;
+  pendingDrafts = run.level - 1;
   draftCharges = {
-    reroll: 2 + save.meta.reroll,
+    reroll: 2 + save.meta.reroll + runSupply("rerolls"),
     skip: 1 + save.meta.skip,
     banish: 1 + save.meta.banish,
   };
@@ -645,7 +727,7 @@ function hud() {
   )
     .map(
       ([id, rank]) =>
-        `<span class="rarity-${JEWEL_BY_ID[id].rarity}" title="${JEWEL_BY_ID[id].name} · Rank ${rank}/3&#10;${JEWEL_BY_ID[id].desc}">${JEWEL_BY_ID[id].glyph}<b>${rank}</b></span>`,
+        `<span class="rarity-${JEWEL_BY_ID[id].rarity}" title="${JEWEL_BY_ID[id].name} · Rank ${rank}/${3 + save.town.mastery[selected.id]}&#10;${JEWEL_BY_ID[id].desc}">${JEWEL_BY_ID[id].glyph}<b>${rank}</b></span>`,
     )
     .join(
       "",
@@ -698,7 +780,8 @@ function spawnEnemy(
     (boss ? 650 + run.bosses * 400 : elite ? 90 : 20) *
     (1 + run.time / 180) *
     expedition.scale *
-    (1 + run.heroic * 0.35);
+    (1 + run.heroic * 0.35) *
+    run.enemyHealth;
   let e = enemyPool.pop() || ({} as Enemy);
   Object.assign(e, {
     x: player.x + Math.cos(a) * r,
@@ -728,6 +811,7 @@ function spawnEnemy(
 }
 function damage(e: Enemy, n: number, kx = 0, ky = 0) {
   if (!e.alive) return;
+  if (e.boss) n *= run.bossDamage;
   if (Math.random() < run.crit) n *= run.critDamage;
   if (Math.random() < run.doubleStrike) n *= 2;
   e.hp -= n;
@@ -747,7 +831,8 @@ function damage(e: Enemy, n: number, kx = 0, ky = 0) {
     e.death = 0.38;
     run.kills++;
     player.hp = Math.min(player.max, player.hp + run.healKill);
-    const gain = (e.boss ? 40 : e.elite ? 5 : 1) * run.goldGain;
+    const gain =
+      (e.boss ? 80 + run.bosses * 40 : e.elite ? 7 : 1) * run.goldGain;
     run.gold += gain;
     gem(e.x, e.y, e.boss ? 25 : e.elite ? 4 : 1);
     for (let i = 0; i < 3; i++)
@@ -798,7 +883,7 @@ function awardGuardianLoot(enemy: Enemy) {
   document.querySelector(".loot-reveal")?.remove();
   const reveal = document.createElement("div");
   reveal.className = "loot-reveal";
-  reveal.innerHTML = `<small>GUARDIAN SPOILS · SAVED TO ARMORY</small><h3>${enemy.bossName}</h3>${loot.found.length ? loot.found.map((i) => `<p class="rarity-${i.rarity}">${SLOT_GLYPHS[i.slot]} ${i.name}</p>`).join("") : "<p>No new pieces this time.</p>"}<small>${loot.duplicates ? `${loot.duplicates} duplicate rolls ignored · ` : ""}${Math.round(getExpedition(run.zoneId).chance * 100)}% independent chance per piece</small>`;
+  reveal.innerHTML = `<small>GUARDIAN SPOILS · SAVED TO ARMORY</small><h3>${enemy.bossName}</h3>${loot.found.length ? loot.found.map((i) => `<p class="rarity-${i.rarity}">${SLOT_GLYPHS[i.slot]} ${i.name}</p>`).join("") : "<p>No new pieces this time.</p>"}<small>${loot.duplicates ? `${loot.duplicates} spare copies saved for salvage · ` : ""}${Math.round(getExpedition(run.zoneId).chance * 100)}% independent chance per piece</small>`;
   notices.append(reveal);
   window.setTimeout(() => reveal.remove(), 6500);
 }
@@ -808,7 +893,9 @@ function dropReliquary(x: number, y: number, source: string) {
 }
 function offerJewelry(source: string, forced?: string[]) {
   if (screen !== "run") return;
-  const pool = JEWELRY.filter((j) => (run.jewelry[j.id] || 0) < j.max);
+  const pool = JEWELRY.filter(
+    (j) => (run.jewelry[j.id] || 0) < j.max + save.town.mastery[selected.id],
+  );
   if (forced)
     jewelryChoices = [...new Set(forced)]
       .map((id) => pool.find((j) => j.id === id))
@@ -850,7 +937,12 @@ function offerJewelry(source: string, forced?: string[]) {
   document.body.classList.remove("playing");
   $.insertAdjacentHTML(
     "beforeend",
-    jewelryOfferMarkup(jewelryChoices, run.jewelry, source),
+    jewelryOfferMarkup(
+      jewelryChoices,
+      run.jewelry,
+      source,
+      save.town.mastery[selected.id],
+    ),
   );
 }
 function resumeJewelry() {
@@ -862,14 +954,14 @@ function resumeJewelry() {
   hud();
 }
 function claimJewelry(id: string) {
-  if (!wearJewelry(run.jewelry, id)) return;
+  if (!wearJewelry(run.jewelry, id, save.town.mastery[selected.id])) return;
   recalculateStats();
   if (screen === "jewelry") resumeJewelry();
   else {
     jewelryChoices = [];
     hud();
   }
-  const message = `Relic: ${JEWEL_BY_ID[id].name} · Rank ${run.jewelry[id]}/3`;
+  const message = `Relic: ${JEWEL_BY_ID[id].name} · Rank ${run.jewelry[id]}/${3 + save.town.mastery[selected.id]}`;
   if (document.hidden) pendingAutoNotice = message;
   else notify(message);
 }
@@ -886,6 +978,7 @@ function gem(x: number, y: number, value: number) {
 }
 function fx(x: number, y: number, text: string, color: string, size: number) {
   if (effects.length > 220) return;
+  if (!text && run.themeColor) color = run.themeColor;
   const f = fxPool.pop() || ({} as Fx);
   Object.assign(f, {
     x,
@@ -1300,7 +1393,8 @@ function update(dt: number) {
       ((5.5 + run.time / 30) *
         (1 +
           EXPEDITIONS.indexOf(getExpedition(run.zoneId)) * 0.12 +
-          run.heroic * 0.08));
+          run.heroic * 0.08) *
+        run.enemySpawns);
     spawnEnemy();
     if (run.time > 90) spawnEnemy();
   }
@@ -1354,7 +1448,8 @@ function update(dt: number) {
         ((e.boss ? 24 : e.elite ? 12 : 7) *
           (1 + EXPEDITIONS.indexOf(expedition) * 0.15 + run.heroic * 0.22) -
           run.armor) *
-          (1 - run.reduction),
+          (1 - run.reduction) *
+          run.enemyDamage,
       );
       player.hp -= taken;
       player.invuln = 0.72;
@@ -1831,7 +1926,12 @@ function finishRun() {
   pendingAutoNotice = "";
   if (!run.earned) {
     run.gold += Math.floor(run.time / 8) * run.goldGain;
-    save.gold += Math.floor(run.gold);
+    if (run.cleared)
+      run.gold +=
+        (180 + EXPEDITIONS.findIndex((z) => z.id === run.zoneId) * 120) *
+        (1 + run.heroic * 0.75) *
+        run.goldGain;
+    save.gold = Math.min(1e15, save.gold + Math.floor(run.gold));
     save.best = Math.max(save.best, run.time);
     save.runs++;
     run.talentXP = Math.floor(run.time * 2 + run.kills * 3 + run.bosses * 150);
@@ -1842,7 +1942,7 @@ function finishRun() {
   talentHeroId = selected.id;
   screen = "dead";
   document.body.classList.remove("playing");
-  $.innerHTML = `<div class="modal-shade"><section class="modal run-summary"><div class="eyebrow">${getExpedition(run.zoneId).name} · ${run.heroic ? "Heroic " + run.heroic : "Normal"}</div><h2>${run.cleared ? "The breach is sealed." : "Not the end. A beginning."}</h2><p>${run.cleared ? `All three guardians defeated. ${run.heroic ? `This zone's gear is now at least ${run.heroic} stars.` : "Heroic I is now unlocked."}` : `${selected.name}'s watch is over. Your hard-earned power remains.`}</p><div class="statsgrid"><div class="stat"><b>${formatTime(run.time)}</b><small>SURVIVED</small></div><div class="stat"><b>${run.kills}</b><small>FOES SLAIN</small></div><div class="stat"><b>${run.level}</b><small>SOUL LEVEL</small></div><div class="stat"><b>◇ ${Math.floor(run.gold)}</b><small>GOLD EARNED</small></div></div><section class="run-loot-summary"><h3>Kept in the Armory · ${run.loot.length} new pieces</h3>${
+  $.innerHTML = `<div class="modal-shade"><section class="modal run-summary"><div class="eyebrow">${getExpedition(run.zoneId).name} · ${run.heroic ? "Heroic " + run.heroic : "Normal"}</div><h2>${run.cleared ? "The breach is sealed." : "Not the end. A beginning."}</h2><p>${run.cleared ? `All three guardians defeated. ${run.heroic ? `This zone's gear is now at least ${run.heroic} stars.` : "Heroic I is now unlocked."}` : `${selected.name}'s watch is over. Your hard-earned power remains.`}</p><div class="statsgrid"><div class="stat"><b>${formatTime(run.time)}</b><small>SURVIVED</small></div><div class="stat"><b>${run.kills}</b><small>FOES SLAIN</small></div><div class="stat"><b>${run.level}</b><small>SOUL LEVEL</small></div><div class="stat"><b>◇ ${Math.floor(run.gold)}</b><small>GOLD EARNED</small></div></div><div class="run-economy-strip"><b>◇ ${Math.floor((run.gold * 60) / Math.max(1, run.time)).toLocaleString()} GOLD / MIN</b><span>Income ×${run.goldGain.toFixed(2)} · ${run.pact ? CONTRACTS.find((c) => c.id === run.pact?.id)?.name + " · " + run.pact.tier + " seals" : "No contract"}</span></div><section class="run-loot-summary"><h3>Kept in the Armory · ${run.loot.length} new pieces</h3>${
     run.loot.length
       ? `<div>${run.loot
           .map((id) => {
@@ -1851,11 +1951,11 @@ function finishRun() {
           })
           .join("")}</div>`
       : "<p>No new gear this crossing. Each assigned piece rolls independently.</p>"
-  }<small>${run.duplicates} duplicate rolls ignored · ${run.defeatedBosses.length}/3 guardians defeated</small><p>Jewelry left behind: ${
+  }<small>${run.duplicates} spare copies saved for salvage · ${run.defeatedBosses.length}/3 guardians defeated</small><p>Jewelry left behind: ${
     Object.entries(run.jewelry)
       .map(([id, rank]) => `${JEWEL_BY_ID[id].name} ${rank}`)
       .join(" · ") || "None"
-  }. The Codex remembers.</p></section><div class="death-buttons"><button class="primary" data-action="armory">Open the Armory ↗</button><button class="secondary" data-action="expeditions">Choose expedition</button><button class="secondary" data-action="shop">Visit the Sanctum</button></div><p class="close-hint">+${run.talentXP} ${selected.name} talent XP · Gold and permanent gear saved · Jewelry resets next expedition</p></section></div>`;
+  }. The Codex remembers.</p></section><div class="death-buttons"><button class="primary" data-action="town">Visit the Town ↗</button><button class="secondary" data-action="armory">Open the Armory</button><button class="secondary" data-action="expeditions">Choose expedition</button></div><p class="close-hint">+${run.talentXP} ${selected.name} talent XP · Gold and permanent gear saved · Jewelry resets next expedition</p></section></div>`;
 }
 
 const ground = document.createElement("canvas");
@@ -1921,15 +2021,16 @@ function numberSprite(text: string, color: string, size: number) {
   numbers.set(key, c);
   return c;
 }
-const sparks = new Map<Weapon, HTMLCanvasElement>();
+const sparks = new Map<string, HTMLCanvasElement>();
 function sparkSprite(type: Weapon) {
-  let c = sparks.get(type);
+  const key = type + run.themeColor;
+  let c = sparks.get(key);
   if (c) return c;
   c = document.createElement("canvas");
   c.width = 24;
   c.height = 24;
   const t = c.getContext("2d")!;
-  t.fillStyle = weaponInfo[type].color;
+  t.fillStyle = run.themeColor || weaponInfo[type].color;
   t.beginPath();
   t.ellipse(12, 12, 10, 7, 0, 0, TAU);
   t.fill();
@@ -1937,7 +2038,7 @@ function sparkSprite(type: Weapon) {
   t.beginPath();
   t.arc(11, 11, 3.5, 0, TAU);
   t.fill();
-  sparks.set(type, c);
+  sparks.set(key, c);
   return c;
 }
 const shadowImage = document.createElement("canvas");
@@ -2410,6 +2511,18 @@ function render() {
         ctx.ellipse(x, y - 39, 35, 51, 0, 0, TAU);
         ctx.stroke();
       }
+      if (run.auraColor) {
+        ctx.save();
+        ctx.strokeStyle = run.auraColor;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.ellipse(x, y + 3, 34 + Math.sin(run.time * 2) * 2, 16, 0, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.save();
+      if (run.hue) ctx.filter = `hue-rotate(${run.hue}deg)`;
       sprite(
         selected,
         player.x,
@@ -2422,6 +2535,7 @@ function render() {
         0,
         player.lunge,
       );
+      ctx.restore();
     } else {
       const m = e as Enemy;
       if (m.boss && m.alive) {
@@ -2653,6 +2767,20 @@ resize();
 $.addEventListener("click", (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>("button");
   if (!el || el.hasAttribute("disabled")) return;
+  if (el.dataset.townPage) {
+    if (TOWN_PAGES.some(([id]) => id === el.dataset.townPage)) {
+      townPage = el.dataset.townPage;
+      townScreen();
+    }
+    return;
+  }
+  if (el.dataset.townBuy) {
+    const result = townAction(save, selected.id, el.dataset.townBuy);
+    if (result.ok) persist();
+    townScreen();
+    notify(result.message);
+    return;
+  }
   if (el.dataset.gearHero) {
     selected = heroes.find((h) => h.id === el.dataset.gearHero)!;
     save.selected = selected.id;
@@ -2780,6 +2908,9 @@ $.addEventListener("click", (e) => {
     return;
   }
   switch (el.dataset.action) {
+    case "town":
+      townScreen();
+      break;
     case "armory":
       armory();
       break;
@@ -2853,6 +2984,23 @@ $.addEventListener("click", (e) => {
 });
 $.addEventListener("change", (e) => {
   const el = e.target as HTMLSelectElement;
+  if (el.dataset.townSetting) {
+    if (el.dataset.townSetting === "hero") {
+      const hero = heroes.find((h) => h.id === el.value);
+      if (hero) {
+        selected = hero;
+        save.selected = hero.id;
+        townChoice = {};
+      }
+    } else if (
+      ["forgeItem", "forgeLine", "enchant", "starter", "contractTier"].includes(
+        el.dataset.townSetting,
+      )
+    )
+      townChoice[el.dataset.townSetting as keyof TownChoice] = el.value;
+    townScreen();
+    return;
+  }
   if (
     !el.matches("[data-auto-preference]") ||
     !["balanced", "offense", "defense"].includes(el.value)
@@ -2970,6 +3118,10 @@ async function init() {
         ),
     );
     selected = heroes.find((a) => a.id === save.selected) || heroes[0];
+    document.documentElement.style.setProperty(
+      "--hero-hue",
+      `${COSMETICS.find((c) => c.id === save.town.cosmetics.tint)?.hue || 0}deg`,
+    );
     title();
     initBackgroundTimer();
     requestAnimationFrame(frame);
@@ -3027,6 +3179,8 @@ async function init() {
       reduction: run.reduction,
       doubleStrike: run.doubleStrike,
       goldGain: run.goldGain,
+      xpGain: run.xpGain,
+      bossDamage: run.bossDamage,
       pickup: run.magnet,
       signatureDamage: run.signatureDamage,
       haste: run.cooldown,
@@ -3039,6 +3193,18 @@ async function init() {
     orbitCount: weapons.blade ? orbitPositions("blade").length : 0,
     talentXP: run.talentXP,
     zones: zones.length,
+    town: structuredClone(save.town),
+    runPreparations: {
+      supplies: [...run.supplies],
+      pact: run.pact,
+      enemyHealth: run.enemyHealth,
+      enemyDamage: run.enemyDamage,
+      enemySpawns: run.enemySpawns,
+      hue: run.hue,
+      aura: run.auraColor,
+      theme: run.themeColor,
+    },
+    goldPerMinute: Math.floor((run.gold * 60) / Math.max(1, run.time)),
     gear: structuredClone(save.gear[selected.id]),
     gearTotals: gearTotals(selected.id, heroGear()),
     expedition: { ...save.expedition },
@@ -3145,6 +3311,7 @@ if (new URLSearchParams(location.search).has("qa"))
       save.gold += amount;
       persist();
       if (screen === "shop") shop();
+      if (screen === "town") townScreen();
     },
     stress: (count = 350) => {
       for (let i = enemies.filter((e) => e.alive).length; i < count; i++)

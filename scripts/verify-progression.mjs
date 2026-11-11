@@ -270,7 +270,7 @@ const rescue = await browser.newContext({
   viewport: { width: 1000, height: 800 },
 });
 await rescue.addInitScript((old) => {
-  localStorage.setItem("hollowmere-v3", "{malformed");
+  localStorage.setItem("hollowmere-v4", "{malformed");
   localStorage.setItem("hollowmere-v1", JSON.stringify(old));
 }, old);
 const rp = await rescue.newPage();

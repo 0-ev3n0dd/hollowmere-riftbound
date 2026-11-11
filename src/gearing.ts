@@ -227,7 +227,7 @@ const lines: Record<GearSlot, GearStat[]> = {
   off: ["area", "haste", "crit", "regen", "reduction"],
   ranged: ["damage", "targets", "critDamage", "doubleStrike", "haste"],
 };
-const base: Record<GearStat, number> = {
+export const GEAR_STAT_BASE: Record<GearStat, number> = {
   damage: 0.025,
   haste: 0.018,
   hp: 9,
@@ -260,7 +260,9 @@ export const GEAR: GearItem[] = HEROES.flatMap((hero) =>
       const stats: Stats = {};
       for (const stat of lines[slot].slice(0, zi + 1))
         stats[stat] =
-          stat === "targets" ? 1 : base[stat] * [1, 1.4, 1.9, 2.6, 3.5][zi];
+          stat === "targets"
+            ? 1
+            : GEAR_STAT_BASE[stat] * [1, 1.4, 1.9, 2.6, 3.5][zi];
       return {
         id: `${hero}-${z.id}-${slot}`,
         hero,
@@ -278,7 +280,29 @@ export const GEAR: GearItem[] = HEROES.flatMap((hero) =>
 export const GEAR_BY_ID = Object.fromEntries(
   GEAR.map((i) => [i.id, i]),
 ) as Record<string, GearItem>;
+export const ENCHANT_BASE: Stats = {
+  damage: 0.012,
+  hp: 6,
+  haste: 0.007,
+  regen: 0.06,
+  area: 0.015,
+  crit: 0.004,
+  gold: 0.018,
+  pickup: 0.02,
+  reduction: 0.004,
+  speed: 0.006,
+};
+export type ItemUpgrade = {
+  level: number;
+  reforges: number;
+  from?: GearStat;
+  to?: GearStat;
+  quality: number;
+};
 export type HeroGear = {
+  upgrades: Record<string, ItemUpgrade>;
+  enchants: Partial<Record<GearSlot, { tier: number; stat: GearStat }>>;
+  duplicates: Record<string, number>;
   inventory: string[];
   equipped: Partial<Record<GearSlot, string>>;
   stars: Record<string, number>;
@@ -286,6 +310,9 @@ export type HeroGear = {
 };
 export function emptyGear(): HeroGear {
   return {
+    upgrades: {},
+    enchants: {},
+    duplicates: {},
     inventory: [],
     equipped: {},
     stars: Object.fromEntries(EXPEDITIONS.map((z) => [z.id, 0])),
@@ -320,25 +347,81 @@ export function migrateGear(raw: any, hero: string): HeroGear {
       : -1;
     const star = Number(raw?.stars?.[z.id]);
     result.stars[z.id] = Number.isFinite(star)
-      ? Math.min(
-          5,
-          Math.max(0, Math.floor(star)),
-          Math.max(0, result.clears[z.id]),
-        )
+      ? Math.min(5, Math.max(0, Math.floor(star)))
       : 0;
+  }
+  for (const id of result.inventory) {
+    const u = raw?.upgrades?.[id];
+    if (u && typeof u === "object") {
+      const rank = (v: unknown) =>
+        Number.isFinite(Number(v))
+          ? Math.max(0, Math.min(10000, Math.floor(Number(v))))
+          : 0;
+      const upgrade: ItemUpgrade = {
+        level: rank(u.level),
+        reforges: rank(u.reforges),
+        quality: Math.max(0.85, Math.min(1.25, Number(u.quality) || 1)),
+      };
+      if (
+        u.from in GEAR_BY_ID[id].stats &&
+        u.to in STAT_LABELS &&
+        !(u.to in GEAR_BY_ID[id].stats)
+      ) {
+        upgrade.from = u.from;
+        upgrade.to = u.to;
+      }
+      result.upgrades[id] = upgrade;
+    }
+    const count = Number(raw?.duplicates?.[id]);
+    if (Number.isFinite(count) && count > 0)
+      result.duplicates[id] = Math.min(1e9, Math.floor(count));
+  }
+  for (const slot of heroSlots(hero)) {
+    const e = raw?.enchants?.[slot];
+    if (e && e.stat in ENCHANT_BASE && Number.isFinite(Number(e.tier)))
+      result.enchants[slot] = {
+        tier: Math.max(0, Math.min(10000, Math.floor(Number(e.tier)))),
+        stat: e.stat,
+      };
   }
   return result;
 }
 export const maxHeroic = (gear: HeroGear, zone: string) =>
   Math.min(5, (gear.clears[zone] ?? -1) + 1);
 export function itemStats(item: GearItem, gear: HeroGear): Stats {
-  const multiplier = 1 + (gear.stars[item.zone] || 0) * 0.18;
+  const u = gear.upgrades[item.id];
+  const multiplier =
+    (1 + (gear.stars[item.zone] || 0) * 0.18) * (1 + (u?.level || 0) * 0.04);
+  const stats = { ...item.stats };
+  if (u?.from && u.to && u.from in stats) {
+    delete stats[u.from];
+    stats[u.to] =
+      u.to === "targets"
+        ? 1
+        : GEAR_STAT_BASE[u.to] *
+          [1, 1.4, 1.9, 2.6, 3.5][RARITIES.indexOf(item.rarity)] *
+          u.quality;
+  }
   return Object.fromEntries(
-    Object.entries(item.stats).map(([key, value]) => [
+    Object.entries(stats).map(([key, value]) => [
       key,
-      key === "targets" ? value : value * multiplier,
+      key === "targets"
+        ? value + Math.floor((u?.level || 0) / 30)
+        : value * multiplier,
     ]),
   );
+}
+export function enchantStats(gear: HeroGear): Stats {
+  const result: Stats = {};
+  for (const [slot, e] of Object.entries(gear.enchants))
+    if (
+      e &&
+      gear.equipped[slot as GearSlot] &&
+      gear.inventory.includes(gear.equipped[slot as GearSlot]!)
+    )
+      result[e.stat] =
+        (result[e.stat] || 0) + (ENCHANT_BASE[e.stat] || 0) * e.tier;
+  return result;
 }
 export function addStats(...sources: Stats[]): Stats {
   const result: Stats = {};
@@ -388,6 +471,7 @@ export function gearTotals(hero: string, gear: HeroGear): Stats {
       .filter((i) => i?.hero === hero && gear.inventory.includes(i.id))
       .map((i) => itemStats(i, gear)),
     ...setStatus(hero, gear).map((s) => s.stats),
+    enchantStats(gear),
   );
 }
 export function formatStat(key: string, value: number): string {
@@ -426,8 +510,10 @@ export function rollBossGear(
   let duplicates = 0;
   for (const item of GEAR.filter((i) => i.hero === hero && i.boss === boss))
     if (random() < getExpedition(item.zone).chance) {
-      if (gear.inventory.includes(item.id)) duplicates++;
-      else {
+      if (gear.inventory.includes(item.id)) {
+        duplicates++;
+        gear.duplicates[item.id] = (gear.duplicates[item.id] || 0) + 1;
+      } else {
         gear.inventory.push(item.id);
         found.push(item);
       }
@@ -618,13 +704,16 @@ export const JEWEL_BY_ID = Object.fromEntries(
   JEWELRY.map((j) => [j.id, j]),
 ) as Record<string, Jewel>;
 export const JEWEL_CAPACITY = { ring: 2, trinket: 2, amulet: 1 };
-export function jewelryStats(worn: Record<string, number>): Stats {
+export function jewelryStats(worn: Record<string, number>, mastery = 0): Stats {
   return addStats(
     ...Object.entries(worn)
       .filter(([id]) => JEWEL_BY_ID[id])
       .map(([id, rank]) =>
         Object.fromEntries(
-          Object.entries(JEWEL_BY_ID[id].stats).map(([k, v]) => [k, v * rank]),
+          Object.entries(JEWEL_BY_ID[id].stats).map(([k, v]) => [
+            k,
+            v * rank * (1 + mastery * 0.03),
+          ]),
         ),
       ),
   );
@@ -641,11 +730,15 @@ export function jewelryReplacement(
     ? same.sort((a, b) => worn[a] - worn[b])[0]
     : undefined;
 }
-export function wearJewelry(worn: Record<string, number>, id: string): boolean {
+export function wearJewelry(
+  worn: Record<string, number>,
+  id: string,
+  bonusRanks = 0,
+): boolean {
   const jewel = JEWEL_BY_ID[id];
-  if (!jewel || (worn[id] || 0) >= jewel.max) return false;
+  if (!jewel || (worn[id] || 0) >= jewel.max + bonusRanks) return false;
   const old = jewelryReplacement(worn, jewel);
   if (old) delete worn[old];
-  worn[id] = Math.min(jewel.max, (worn[id] || 0) + 1);
+  worn[id] = Math.min(jewel.max + bonusRanks, (worn[id] || 0) + 1);
   return true;
 }

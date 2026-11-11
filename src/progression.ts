@@ -1,3 +1,4 @@
+import { migrateTown, type TownState } from "./town";
 import {
   EXPEDITIONS,
   JEWEL_BY_ID,
@@ -6,7 +7,7 @@ import {
   type HeroGear,
 } from "./gearing";
 /** Original Hollowmere progression catalog and pure save/talent rules. */
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 export const HERO_IDS = ["c112", "c028", "c030", "c044", "c080", "c001"];
 export type Weapon =
   | "blade"
@@ -917,7 +918,8 @@ export function talentTrees(hero: string): TalentTree[] {
 export type HeroProgress = { xp: number; spent: Record<string, number> };
 export type AutoPreference = "balanced" | "offense" | "defense";
 export type Save = {
-  version: 3;
+  version: 4;
+  town: TownState;
   gear: Record<string, HeroGear>;
   codex: string[];
   expedition: { zone: string; heroic: number };
@@ -1010,7 +1012,8 @@ export function migrateSave(raw: any): Save {
     : ["c112"];
   if (!unlocked.includes("c112")) unlocked.unshift("c112");
   const result: Save = {
-    version: 3,
+    version: 4,
+    town: migrateTown(data.town),
     gear: Object.fromEntries(
       HERO_IDS.map((hero) => [hero, migrateGear(data.gear?.[hero], hero)]),
     ),
@@ -1040,7 +1043,7 @@ export function migrateSave(raw: any): Save {
         ? data.settings.autoPreference
         : "balanced",
     },
-    gold: finite(data.gold),
+    gold: finite(data.gold, 1e15),
     unlocked: [...new Set<string>(unlocked)],
     selected: HERO_IDS.includes(data.selected) ? data.selected : "c112",
     meta: {},
@@ -1070,7 +1073,12 @@ export function migrateSave(raw: any): Save {
   return result;
 }
 export function loadSave(storage: Pick<Storage, "getItem">): Save {
-  for (const key of ["hollowmere-v3", "hollowmere-v2", "hollowmere-v1"]) {
+  for (const key of [
+    "hollowmere-v4",
+    "hollowmere-v3",
+    "hollowmere-v2",
+    "hollowmere-v1",
+  ]) {
     try {
       const s = storage.getItem(key);
       if (s) return migrateSave(JSON.parse(s));
