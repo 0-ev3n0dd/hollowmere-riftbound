@@ -908,8 +908,10 @@ export function talentTrees(hero: string): TalentTree[] {
   });
 }
 export type HeroProgress = { xp: number; spent: Record<string, number> };
+export type AutoPreference = "balanced" | "offense" | "defense";
 export type Save = {
   version: 2;
+  settings: { autoUpgrade: boolean; autoPreference: AutoPreference };
   gold: number;
   unlocked: string[];
   selected: string;
@@ -999,6 +1001,14 @@ export function migrateSave(raw: any): Save {
   if (!unlocked.includes("c112")) unlocked.unshift("c112");
   const result: Save = {
     version: 2,
+    settings: {
+      autoUpgrade: data.settings?.autoUpgrade === true,
+      autoPreference: ["balanced", "offense", "defense"].includes(
+        data.settings?.autoPreference,
+      )
+        ? data.settings.autoPreference
+        : "balanced",
+    },
     gold: finite(data.gold),
     unlocked: [...new Set<string>(unlocked)],
     selected: HERO_IDS.includes(data.selected) ? data.selected : "c112",

@@ -2,8 +2,7 @@ import { chromium, expect } from "@playwright/test";
 import fs from "node:fs";
 const browser = await chromium.launch({
   headless: true,
-  executablePath:
-    "/home/box/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome",
+  executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
   args: ["--no-sandbox", "--disable-background-timer-throttling"],
 });
 const report = { checks: [], errors: [], performance: [] };

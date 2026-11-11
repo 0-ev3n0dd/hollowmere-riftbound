@@ -2170,3 +2170,93 @@ h1 em {
     padding-bottom: 18px;
   }
 }
+
+/* Persistent auto-upgrade controls; their inputs remain interactive above Canvas. */
+#notices {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+#notices .toast {
+  max-width: min(460px, calc(100vw - 32px));
+  width: max-content;
+  text-align: center;
+  box-shadow: 0 5px 25px #17292533;
+}
+.auto-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 1px solid #67765a55;
+  border-radius: 6px;
+  background: #f4f0e4ee;
+  color: #33473c;
+  pointer-events: auto;
+}
+.auto-toggle {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 3px 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.auto-toggle b {
+  display: inline-block;
+  min-width: 28px;
+  margin-left: 4px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  background: #d8d7cc;
+  font-size: 9px;
+}
+.auto-toggle.enabled b {
+  background: #315e49;
+  color: #fff9df;
+}
+.auto-controls select {
+  pointer-events: auto;
+  border: 0;
+  border-left: 1px solid #67765a55;
+  padding: 3px 0 3px 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.auto-controls :focus-visible {
+  outline: 2px solid #867236;
+  outline-offset: 3px;
+}
+.auto-hud {
+  position: absolute;
+  right: 28px;
+  top: 104px;
+}
+.auto-draft {
+  margin: 0 auto 16px;
+}
+@media (max-width: 800px) {
+  .auto-hud {
+    right: 12px;
+    top: 111px;
+  }
+  .auto-controls {
+    gap: 5px;
+    padding: 5px 7px;
+  }
+  .auto-toggle,
+  .auto-controls select {
+    font-size: 10px;
+  }
+  .auto-draft {
+    margin-bottom: 12px;
+  }
+  #notices .toast {
+    bottom: 150px;
+    padding: 10px 14px;
+  }
+}

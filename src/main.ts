@@ -1,4 +1,7 @@
 import "./style.css";
+import { SimulationClock } from "./simulation-clock";
+import { pickAutoUpgrade } from "./auto-upgrade";
+import type { AutoPreference } from "./progression";
 import {
   VERSION,
   SPELLS as weaponInfo,
@@ -47,6 +50,11 @@ type Screen =
   | "dead"
   | "unlock";
 const $ = document.querySelector<HTMLElement>("#ui")!;
+const notices = document.createElement("aside");
+notices.id = "notices";
+notices.setAttribute("role", "status");
+notices.setAttribute("aria-live", "polite");
+document.body.append(notices);
 const canvas = document.querySelector<HTMLCanvasElement>("#world")!;
 const ctx = canvas.getContext("2d", { alpha: false })!;
 const TAU = Math.PI * 2,
@@ -169,7 +177,7 @@ function notify(text: string) {
   const el = document.createElement("div");
   el.className = "toast";
   el.textContent = text;
-  $.append(el);
+  notices.append(el);
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => el.remove(), 3000);
 }
@@ -334,6 +342,8 @@ function makeRun() {
     healCd: 0,
     forkCd: 0,
     talentXP: 0,
+    autoPicks: 0,
+    lastAutoPick: "",
   };
 }
 let qaFreezeProgression = false;
@@ -431,6 +441,9 @@ let spawnTimer = 0,
 function startRun(): void {
   if (!save.unlocked.includes(selected.id)) return unlock();
   screen = "run";
+  simulationClock.reset(performance.now());
+  pendingAutoNotice = "";
+  notices.replaceChildren();
   document.body.classList.add("playing");
   enemies = [];
   enemyPool = [];
@@ -489,11 +502,16 @@ function banner(text: string, sub = "THE RIFT GROWS RESTLESS") {
   bannerText = `<small>${sub}</small>${text}`;
   bannerTimer = 3;
 }
+function autoControls() {
+  return `<div class="auto-controls" title="Evolution first, then recipe progress, empty slots, and rarity. Never spends draft charges."><button class="auto-toggle ${save.settings.autoUpgrade ? "enabled" : ""}" data-action="toggle-auto" aria-pressed="${save.settings.autoUpgrade}">Auto-upgrade <b>${save.settings.autoUpgrade ? "ON" : "OFF"}</b></button><select data-auto-preference aria-label="Auto-upgrade preference">${(["balanced", "offense", "defense"] as const).map((p) => `<option value="${p}" ${save.settings.autoPreference === p ? "selected" : ""}>${p[0].toUpperCase() + p.slice(1)}</option>`).join("")}</select></div>`;
+}
 function hud() {
-  if (screen !== "run") return;
+  if (screen !== "run" || document.hidden) return;
+  // Do not replace a native select while its popup is open.
+  if (document.activeElement?.matches("[data-auto-preference]")) return;
   const spells = weaponKeys.filter((k) => weapons[k]),
     ps = PASSIVE_KEYS.filter((k) => passives[k]);
-  $.innerHTML = `<section class="hud"><div class="xp-bar"><div class="xp-fill" style="width:${Math.min(100, (run.xp / run.need) * 100)}%"></div></div><div class="hud-top"><div class="player-panel"><div class="player-name">${selected.name}<small>LEVEL ${run.level}</small></div><div class="hp-track"><div class="hp-fill" style="width:${(player.hp / player.max) * 100}%"></div></div><div class="hp-text"><span>${Math.ceil(player.hp)} / ${player.max} vitality</span><span>${Math.floor(run.xp)} / ${run.need} XP</span></div></div><div class="time-panel"><b>${formatTime(run.time)}</b><small>WAVE ${Math.floor(run.time / 30) + 1} · RIFT LORD IN ${formatTime(nextBoss - run.time)}</small></div><div class="run-resources"><span class="coin">◇</span><b>${Math.floor(run.gold)}</b><span class="sep">/</span><span>⚔ ${run.kills}</span><button class="pause" data-action="pause" aria-label="Pause">Ⅱ</button></div></div><div class="hud-bottom"><div class="loadout"><div class="loadout-label">SPELLS ${spells.length}/6</div><div class="weaponbar">${Array.from(
+  $.innerHTML = `<section class="hud"><div class="xp-bar"><div class="xp-fill" style="width:${Math.min(100, (run.xp / run.need) * 100)}%"></div></div><div class="hud-top"><div class="player-panel"><div class="player-name">${selected.name}<small>LEVEL ${run.level}</small></div><div class="hp-track"><div class="hp-fill" style="width:${(player.hp / player.max) * 100}%"></div></div><div class="hp-text"><span>${Math.ceil(player.hp)} / ${player.max} vitality</span><span>${Math.floor(run.xp)} / ${run.need} XP</span></div></div><div class="time-panel"><b>${formatTime(run.time)}</b><small>WAVE ${Math.floor(run.time / 30) + 1} · RIFT LORD IN ${formatTime(nextBoss - run.time)}</small></div><div class="run-resources"><span class="coin">◇</span><b>${Math.floor(run.gold)}</b><span class="sep">/</span><span>⚔ ${run.kills}</span><button class="pause" data-action="pause" aria-label="Pause">Ⅱ</button></div></div><div class="auto-hud">${autoControls()}</div><div class="hud-bottom"><div class="loadout"><div class="loadout-label">SPELLS ${spells.length}/6</div><div class="weaponbar">${Array.from(
     { length: 6 },
     (_, i) => {
       const k = spells[i];
@@ -1368,7 +1386,7 @@ function showDraft() {
     passiveCount = PASSIVE_KEYS.filter((k) => passives[k]).length;
   $.insertAdjacentHTML(
     "beforeend",
-    `<div class="modal-shade draft-shade"><section class="modal draft-modal"><div class="draft-top"><span class="eyebrow">Level ${run.level} · ${pendingDrafts ? "First Light bonus" : "A soul awakened"}</span><span class="draft-capacity">SPELLS ${spellCount}/6 <i>·</i> PASSIVES ${passiveCount}/6</span></div><h2>${banishMode ? "Sever a possibility." : "Choose your power."}</h2><p>${banishMode ? "Tap a card to banish it for this expedition, then receive a fresh draft." : "18 spells. 16 passives. A different path every time."}</p><div class="choices ${banishMode ? "banishing" : ""}">${choices.map((c, i) => `<button class="upgrade rarity-${c.rarity}" data-upgrade="${i}" data-card-id="${c.id}" ${banishMode && c.kind === "supply" ? "disabled" : ""}><div class="card-rarity">${c.rarity.toUpperCase()} <span>${c.kind === "spell" ? "✦" : "◈"}</span></div><span class="glyph">${c.glyph}</span><span class="tier">${c.tier}</span><h3>${c.name}</h3><p>${c.desc}</p><span class="choose">${banishMode ? "⊘ Banish this card" : c.rarity === "epic" ? "+2 ranks · Claim ↗" : c.rarity === "rare" ? "+12 gold · Claim ↗" : c.rarity === "uncommon" ? "+5 vitality · Claim ↗" : "Claim this blessing ↗"}</span></button>`).join("")}</div><div class="draft-actions"><button data-action="reroll" ${draftCharges.reroll ? "" : "disabled"}>⟳ Reroll <b>${draftCharges.reroll}</b></button><button data-action="skip-draft" ${draftCharges.skip ? "" : "disabled"}>↷ Skip for ◇ ${20 + run.level * 2} <b>${draftCharges.skip}</b></button><button data-action="banish" class="${banishMode ? "active" : ""}" ${draftCharges.banish && choices.some((c) => c.kind !== "supply") ? "" : "disabled"}>⊘ ${banishMode ? "Cancel banish" : "Banish"} <b>${draftCharges.banish}</b></button></div><details class="recipes"><summary>Six evolution recipes · Max spell + matching passive</summary><div>${Object.entries(
+    `<div class="modal-shade draft-shade"><section class="modal draft-modal"><div class="draft-top"><span class="eyebrow">Level ${run.level} · ${pendingDrafts ? "First Light bonus" : "A soul awakened"}</span><span class="draft-capacity">SPELLS ${spellCount}/6 <i>·</i> PASSIVES ${passiveCount}/6</span></div><h2>${banishMode ? "Sever a possibility." : "Choose your power."}</h2><p>${banishMode ? "Tap a card to banish it for this expedition, then receive a fresh draft." : "18 spells. 16 passives. A different path every time."}</p><div class="auto-draft">${autoControls()}</div><div class="choices ${banishMode ? "banishing" : ""}">${choices.map((c, i) => `<button class="upgrade rarity-${c.rarity}" data-upgrade="${i}" data-card-id="${c.id}" ${banishMode && c.kind === "supply" ? "disabled" : ""}><div class="card-rarity">${c.rarity.toUpperCase()} <span>${c.kind === "spell" ? "✦" : "◈"}</span></div><span class="glyph">${c.glyph}</span><span class="tier">${c.tier}</span><h3>${c.name}</h3><p>${c.desc}</p><span class="choose">${banishMode ? "⊘ Banish this card" : c.rarity === "epic" ? "+2 ranks · Claim ↗" : c.rarity === "rare" ? "+12 gold · Claim ↗" : c.rarity === "uncommon" ? "+5 vitality · Claim ↗" : "Claim this blessing ↗"}</span></button>`).join("")}</div><div class="draft-actions"><button data-action="reroll" ${draftCharges.reroll ? "" : "disabled"}>⟳ Reroll <b>${draftCharges.reroll}</b></button><button data-action="skip-draft" ${draftCharges.skip ? "" : "disabled"}>↷ Skip for ◇ ${20 + run.level * 2} <b>${draftCharges.skip}</b></button><button data-action="banish" class="${banishMode ? "active" : ""}" ${draftCharges.banish && choices.some((c) => c.kind !== "supply") ? "" : "disabled"}>⊘ ${banishMode ? "Cancel banish" : "Banish"} <b>${draftCharges.banish}</b></button></div><details class="recipes"><summary>Six evolution recipes · Max spell + matching passive</summary><div>${Object.entries(
       EVOLUTIONS,
     )
       .map(
@@ -1381,11 +1399,59 @@ function showDraft() {
   );
 }
 function levelUp() {
-  screen = "levelup";
-  document.body.classList.remove("playing");
   banishMode = false;
   dealDraft();
+  if (save.settings.autoUpgrade) {
+    resolveAutoDraft();
+    return;
+  }
+  screen = "levelup";
+  document.body.classList.remove("playing");
   showDraft();
+}
+function applyUpgrade(c: Upgrade) {
+  c.apply();
+  if (c.rarity === "uncommon") player.hp = Math.min(player.max, player.hp + 5);
+  if (c.rarity === "rare") run.gold += 12;
+  checkEvolutions();
+}
+let pendingAutoNotice = "";
+function resolveAutoDraft() {
+  if (screen === "levelup") simulationClock.reset(performance.now());
+  banishMode = false;
+  let count = 0;
+  // Iterate instead of recursively choosing: large XP bursts cannot overflow the stack.
+  // Excess earned XP after this batch is picked up by the next fixed simulation step.
+  while (choices.length && count < 64) {
+    const index = pickAutoUpgrade(
+      choices,
+      { weapons, passives, evolved, hp: player.hp, maxHp: player.max },
+      save.settings.autoPreference,
+    );
+    const c = choices[index];
+    if (!c) break;
+    applyUpgrade(c);
+    run.autoPicks++;
+    run.lastAutoPick = c.name;
+    count++;
+    if (pendingDrafts > 0) pendingDrafts--;
+    if (count >= 64) break;
+    if (pendingDrafts === 0) {
+      if (run.xp < run.need) break;
+      run.xp -= run.need;
+      run.level++;
+      run.need = Math.floor(8 + run.level * 3.4);
+      player.hp = Math.min(player.max, player.hp + 8);
+    }
+    dealDraft();
+  }
+  screen = "run";
+  document.body.classList.add("playing");
+  document.querySelector(".draft-shade")?.remove();
+  hud();
+  const message = `Auto: ${run.lastAutoPick}${count > 1 ? ` (+${count - 1} more upgrades)` : ""}`;
+  if (document.hidden) pendingAutoNotice = message;
+  else notify(message);
 }
 function resumeDraft() {
   banishMode = false;
@@ -1396,6 +1462,7 @@ function resumeDraft() {
       return;
     }
   }
+  simulationClock.reset(performance.now());
   screen = "run";
   document.body.classList.add("playing");
   hud();
@@ -1416,10 +1483,7 @@ function choose(i: number) {
     showDraft();
     return;
   }
-  c.apply();
-  if (c.rarity === "uncommon") player.hp = Math.min(player.max, player.hp + 5);
-  if (c.rarity === "rare") run.gold += 12;
-  checkEvolutions();
+  applyUpgrade(c);
   resumeDraft();
 }
 function draftAction(action: string) {
@@ -1441,6 +1505,7 @@ function draftAction(action: string) {
   }
 }
 function pause() {
+  simulationClock.reset(performance.now());
   if (screen === "run") {
     screen = "paused";
     document.body.classList.remove("playing");
@@ -2131,19 +2196,77 @@ function render() {
   }
   ctx.globalAlpha = 1;
 }
+const simulationClock = new SimulationClock();
+let backgroundWorker: Worker | null = null;
+let backgroundInterval = 0;
+let workerWakes = 0,
+  intervalWakes = 0,
+  renderCount = 0;
+function pumpSimulation() {
+  simulationClock.pump(
+    performance.now(),
+    () => screen === "run",
+    update,
+    document.hidden ? 120 : 6,
+  );
+}
+function intervalFallback() {
+  backgroundWorker?.terminate();
+  backgroundWorker = null;
+  if (document.hidden && !backgroundInterval)
+    backgroundInterval = window.setInterval(() => {
+      intervalWakes++;
+      pumpSimulation();
+    }, 250);
+}
+function syncBackgroundTimer() {
+  if (document.hidden) {
+    if (backgroundWorker) backgroundWorker.postMessage("start");
+    else intervalFallback();
+  } else {
+    backgroundWorker?.postMessage("stop");
+    clearInterval(backgroundInterval);
+    backgroundInterval = 0;
+  }
+}
+function initBackgroundTimer() {
+  try {
+    backgroundWorker = new Worker(
+      new URL("./background-timer.ts", import.meta.url),
+      { type: "module" },
+    );
+    backgroundWorker.onmessage = () => {
+      if (document.hidden) {
+        workerWakes++;
+        pumpSimulation();
+      }
+    };
+    backgroundWorker.onerror = (event) => {
+      event.preventDefault();
+      intervalFallback();
+    };
+  } catch {
+    intervalFallback();
+  }
+  simulationClock.reset(performance.now());
+  syncBackgroundTimer();
+}
 let renderedScreen: Screen | "" = "";
 function frame(now: number) {
-  const raw = now - lastTime || 16.67,
-    dt = Math.min(0.04, raw / 1000);
+  const raw = now - lastTime || 16.67;
   lastTime = now;
-  frameMs = frameMs * 0.97 + raw * 0.03;
-  fps = 1000 / frameMs;
-  if (screen === "run") update(dt);
+  if (!document.hidden && raw < 200) {
+    frameMs = frameMs * 0.97 + raw * 0.03;
+    fps = 1000 / frameMs;
+  }
+  pumpSimulation();
   if (
-    !["levelup", "paused", "dead"].includes(screen) ||
-    renderedScreen !== screen
+    !document.hidden &&
+    (!["levelup", "paused", "dead"].includes(screen) ||
+      renderedScreen !== screen)
   ) {
     render();
+    renderCount++;
     renderedScreen = screen;
   }
   requestAnimationFrame(frame);
@@ -2225,6 +2348,13 @@ $.addEventListener("click", (e) => {
     return;
   }
   switch (el.dataset.action) {
+    case "toggle-auto":
+      save.settings.autoUpgrade = !save.settings.autoUpgrade;
+      persist();
+      if (save.settings.autoUpgrade && screen === "levelup") resolveAutoDraft();
+      else if (screen === "levelup") showDraft();
+      else hud();
+      break;
     case "title":
       title();
       break;
@@ -2273,7 +2403,24 @@ $.addEventListener("click", (e) => {
       break;
   }
 });
+$.addEventListener("change", (e) => {
+  const el = e.target as HTMLSelectElement;
+  if (
+    !el.matches("[data-auto-preference]") ||
+    !["balanced", "offense", "defense"].includes(el.value)
+  )
+    return;
+  save.settings.autoPreference = el.value as AutoPreference;
+  persist();
+  el.blur();
+  if (screen === "levelup") showDraft();
+  else hud();
+});
 addEventListener("keydown", (e) => {
+  if ((e.target as HTMLElement)?.matches("select, input, textarea")) {
+    if (e.key !== "Escape") return;
+    (e.target as HTMLElement).blur();
+  }
   const k = e.key.toLowerCase();
   if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k))
     e.preventDefault();
@@ -2286,11 +2433,22 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 addEventListener("blur", () => {
   keys.clear();
-  joy.x = joy.y = 0;
-  if (screen === "run") pause();
+  releaseJoy();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && screen === "run") pause();
+  keys.clear();
+  releaseJoy();
+  syncBackgroundTimer();
+  pumpSimulation();
+  lastTime = performance.now();
+  if (!document.hidden) {
+    renderedScreen = "";
+    hud();
+    if (pendingAutoNotice) {
+      notify(pendingAutoNotice);
+      pendingAutoNotice = "";
+    }
+  }
 });
 const joystick = document.querySelector<HTMLElement>("#joystick")!,
   knob = joystick.firstElementChild as HTMLElement;
@@ -2365,6 +2523,7 @@ async function init() {
     );
     selected = heroes.find((a) => a.id === save.selected) || heroes[0];
     title();
+    initBackgroundTimer();
     requestAnimationFrame(frame);
   } catch (e) {
     $.innerHTML = `<div class="screen"><h1>The Hollow couldn't awaken.</h1><p>Please refresh to retry loading the local art.</p></div>`;
@@ -2393,6 +2552,21 @@ async function init() {
     passives: { ...passives },
     evolved: [...evolved],
     draftCharges: { ...draftCharges },
+    settings: { ...save.settings },
+    autoPicks: run.autoPicks,
+    lastAutoPick: run.lastAutoPick,
+    xp: run.xp,
+    xpNeeded: run.need,
+    pendingDrafts,
+    background: {
+      hidden: document.hidden,
+      workerAvailable: !!backgroundWorker,
+      workerWakes,
+      intervalWakes,
+      renderCount,
+      backlog: simulationClock.backlogSeconds,
+      steps: simulationClock.steps,
+    },
     banished: [...banished],
     choices: choices.map((c) => ({ id: c.id, kind: c.kind, rarity: c.rarity })),
     heroProgress: structuredClone(save.heroes),
@@ -2425,6 +2599,12 @@ async function init() {
 if (new URLSearchParams(location.search).has("qa"))
   Object.assign((window as any).__hollowmere, {
     levelUp,
+    grantRunXP: (amount: number) => {
+      run.xp += Math.max(
+        0,
+        Math.min(1e7, Number.isFinite(amount) ? amount : 0),
+      );
+    },
     grantTalentXP: (amount: number, hero = selected.id) => {
       save.heroes[hero].xp += amount;
       persist();
@@ -2455,13 +2635,18 @@ if (new URLSearchParams(location.search).has("qa"))
       trees: talentTrees(selected.id),
     }),
     forceDraft: (ids: string[]) => {
-      levelUp();
+      banishMode = false;
       const pool = draftPool();
       choices = ids
         .map((id) => pool.find((c) => c.id === id))
         .filter((c): c is Upgrade => !!c)
         .slice(0, 3);
-      showDraft();
+      if (save.settings.autoUpgrade) resolveAutoDraft();
+      else {
+        screen = "levelup";
+        document.body.classList.remove("playing");
+        showDraft();
+      }
     },
     grantGold: (amount: number) => {
       save.gold += amount;

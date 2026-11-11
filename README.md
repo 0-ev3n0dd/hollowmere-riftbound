@@ -16,6 +16,15 @@ Local preview: http://localhost:4174/hollowmere-riftbound/
 
 WASD / arrows move; the touch joystick appears on touch devices. All weapons attack automatically. Gather XP gems, then click/tap a draft card or press **1 / 2 / 3**. **Escape** pauses. Retreat from the pause menu to bank rewards; death also banks them. Bosses arrive every three minutes. Runs are endless, and active runs do not resume after a refresh.
 
+## Background play and automatic upgrades
+
+- Focus loss no longer pauses. Blur clears held movement/joystick input; **Escape still manually pauses**, and a manual draft still waits for your choice.
+- Hidden tabs use a dedicated worker wake-up every 250ms, with an interval fallback if workers are unavailable. One wall clock shared with RAF runs **1/60-second fixed simulation steps** (at most 120 per background wake, six per visible paint). Hidden Canvas/HUD rendering is skipped. Catch-up retains at most 60 seconds after a severe browser/OS suspension, never one huge delta or an unbounded backlog. A discarded/frozen process or sleeping device cannot execute gameplay; this is not offline/closed-tab progression.
+- **Auto-upgrade ON/OFF** is available in the HUD and draft. It defaults OFF for existing/new saves and persists with a **Balanced / Offense / Defense** preference. Turning it on during a draft resolves that draft immediately.
+- Auto picks only from the same three dealt cards: **complete an evolution → upgrade owned recipe components → fill empty slots → rarity**. Preference breaks ties within a tier. Balanced fills the smaller loadout category; Offense favors spells/damage passives; Defense favors survival passives. Evolutions already transform immediately once eligible. Auto never spends reroll, skip, or banish charges; rarity benefits still apply.
+- Every queued level gets a pick, including First Light bonus drafts. Large XP bursts drain in batches of at most 64 picks to avoid recursion/stack overflow. A small toast names the latest pick (and the number of additional batch picks), surviving HUD refreshes.
+- Runs keep fighting, collecting XP, and taking damage while in the background. Enable auto-upgrade if you want level-ups not to wait for a manual choice.
+
 ## Progression expansion
 
 - **6 heroes, 18 original talent trees, 144 named talent nodes.** Each hero has three themed trees and their own talent XP/allocations, independent of gold and the other heroes.
@@ -59,15 +68,16 @@ Canvas uses a cached isometric ground pattern, depth sorting, procedural bob/squ
 ## Verification
 
 ```sh
-node scripts/test-progression-rules.mjs
+npm test
 node scripts/verify-progression.mjs
+node scripts/verify-background-auto.mjs
 ```
 
 The rules test validates all eighteen talent trees, reachable capstones, cascading refunds, exclusivity, the 51-point cap, malformed allocations, and catalog counts. It uses the esbuild dependency installed with Vite.
 
 The browser suite validates v1 migration, talent spending/refunds/row gates, actual milestone/capstone effects, draft actions and limits, all six real draft-triggered evolutions, rewards, persistence, starting-level/charge upgrades, corrupted-save recovery, mobile tap interaction, and an evolved-weapon horde stress scene. It writes `/workspace/iso-progression-verification.json` and screenshots `/workspace/iso-shot-talents.png`, `iso-shot-draft.png`, `iso-shot-sanctum2.png`, and `iso-shot-evolved.png` (plus mobile views).
 
-Browser scripts use the box's installed Chromium path; change it to the local Playwright executable if running elsewhere. Read-only diagnostics: `window.__hollowmere.snapshot()`. Explicit `?qa=1` enables local test helpers; those helpers only affect that browser's own local save and have no external service or paid resource access.
+Browser suites use Playwright's installed Chromium by default; set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome` to use another installed Chromium. The background suite deliberately removes Playwright's anti-throttling launch defaults, suppresses RAF while simulating hidden visibility, verifies worker/fallback time progression, manual pause, auto picks/evolution/queues, no-charge behavior, persistence, and mobile touch controls. It writes `/workspace/iso-background-auto-verification.json` and `iso-shot-auto-{hud,draft}.png` (plus mobile views). Read-only diagnostics: `window.__hollowmere.snapshot()`. Explicit `?qa=1` enables local test helpers; those helpers only affect that browser's own local save and have no external service or paid resource access.
 
 ## Deployment and limitations
 
